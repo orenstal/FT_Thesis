@@ -1,4 +1,4 @@
-# Taken from: http://stackoverflow.com/questions/5191436/creating-two-separate-executables-from-a-makefile-g
+# based on: http://stackoverflow.com/questions/5191436/creating-two-separate-executables-from-a-makefile-g
 CC = g++
 CFLAGS = -c -Wall -DDEBUG -g
 LDFLAGS =
