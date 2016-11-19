@@ -16,7 +16,7 @@ using namespace std;
 
 PushPacketId::PushPacketId(uint8_t producerID) {
 	_seqNum = 128;
-	_producerId = producerID;
+	_producerId = producerID;	// valid values for producer id are 1-6
 }
 
 bool PushPacketId::isValidSeqNum(uint32_t candidate) {
@@ -85,7 +85,7 @@ uint16_t PushPacketId::getOuterVlan(uint32_t seqNumber) {
 	// extract the 7 right-most bits
 	temp = seqNumber & 127;
 
-	// concatenate 5 zero's for initial version.
+	// concatenate 5 zero's for initial version (valid values are 1-30)
 	temp = (temp << 5);
 
 	return (temp | 1);
