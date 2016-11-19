@@ -1,8 +1,8 @@
 # based on: http://stackoverflow.com/questions/5191436/creating-two-separate-executables-from-a-makefile-g
 CC = g++
-CFLAGS = -c -Wall -DDEBUG -g
+CFLAGS = -c -Wall -std=c++11 -DDEBUG -g
 LDFLAGS =
-TEST_SOURCES = ft_thesis.cpp
+TEST_SOURCES = ft_thesis.cpp pushPacketId.cpp
 TEST_OBJECTS = $(TEST_SOURCES:.cpp=.o)
 TEST_EXECUTABLE = mytestprogram
 

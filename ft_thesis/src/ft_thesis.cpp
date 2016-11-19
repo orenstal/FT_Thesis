@@ -1,11 +1,102 @@
 
 #include <iostream>
+
+#include "pushPacketId.hh"
 using namespace std;
+
+void testPushPacketId() {
+	uint32_t totalGood = 0;
+	uint32_t totalBad = 0;
+
+	cout << "-------------------------------------------------------------------" << endl;
+	cout << "Start testing PushPacketId element..." << endl;
+
+	PushPacketId ppid (3);
+
+	for (uint32_t seqNum = 0; seqNum <= 268435455; seqNum ++) {
+		uint16_t te1 = seqNum >> 7;
+
+		if (((te1 & 4095) == 4095) || ((te1 & 4095) == 0)) {
+			if (!ppid.isValidSeqNum(seqNum)) {
+//				cout << "[" << total++ << "] seqNum " << seqNum << " (te1: " << te1 << ") is invalid !!" << endl;
+			} else {
+				cout << "There is a difference for seqNum: " << seqNum << endl;
+			}
+			totalBad++;
+		} else {
+			uint32_t generatedSeq = ppid.getNexSeqNum();
+			if (seqNum != generatedSeq) {
+				cout << "Difference: seqNum: " << seqNum << ", generatedSeq: " << generatedSeq << endl;
+			}
+			totalGood++;
+		}
+	}
+
+	if (totalGood != 268304384) {
+		cout << "There is a difference in total good sequence numbers (" << totalGood << ") instead of 268304384" << endl;
+	}
+
+	if (totalBad != 131072) {
+		cout << "There is a difference in total bad sequence numbers (" << totalBad << ") instead of 131072" << endl;
+	}
+
+	ppid.getNextId();
+	cout << "Expected: seqNum: 128, inner: 1536, middle: 1, outer: 1\n" << endl;
+
+	ppid.getNextId();
+	cout << "Expected: seqNum: 129, inner: 1536, middle: 1, outer: 33\n" << endl;
+
+	for (int i=0; i<126; i++) {
+		ppid.getNexSeqNum();
+	}
+
+	ppid.getNextId();
+	cout << "Expected: seqNum: 256, inner: 1536, middle: 2, outer: 1\n" << endl;
+
+
+	cout << "Done testing." << endl;
+}
 
 int main() {
 	cout << "!!!Hello World1!!!" << endl;
+	uint16_t tci1, tci2, tci3;
+	tci1 = 49;		// least significant
+	tci2 = 4003;
+	tci3 = 204;		// most significant [inner encap]
+
+	uint64_t result = tci3;
+	result = (result << 12) | tci2;
+	result = (result << 12) | tci1;
+
+	cout << "tci1: " << tci1 << ", tci2: " << tci2 << ", tci3: " << tci3 << ", res: " << result << endl;
+
+	uint16_t version = tci1 & 31;	// the version number is the right-most 5 bits. In order to avoid tci1 to be 4095, we permit achieving only 31 versions (0-30). version 31 is prohibited.
+	cout << "the version is: " << version << endl;
+	uint16_t newVersion = version + 1;
+	cout << "the new version is: " << newVersion << endl;
+
+
+	testPushPacketId();
+
 	return 0;
 }
+
+
+//bool isValidSeqNum(uint32_t candidate) {
+//	// we want to ignore the three right-most bits (because they part of the inner vlan and
+//	// therefore valid (no chance to get 0 or 4095 thanks for the version bits).
+//	candidate = candidate >> 3;
+//
+//	// then we want to check the 12 bits that constitute the second vlan (4095 = 111111111111).
+//	candidate &= 4095;
+//
+//	// finally we check that the middle vlan isn't 0 or 4095 (preserved for 802.1Q).
+//	if (candidate == 4095 || candidate == 0) {
+//		return false;
+//	}
+//
+//	return true;
+//}
 
 /*
  * There is IDProducer instance before the first middlebox in each chain and after each
