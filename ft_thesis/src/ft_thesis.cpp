@@ -40,18 +40,21 @@ void testPushPacketId() {
 		cout << "There is a difference in total bad sequence numbers (" << totalBad << ") instead of 131072" << endl;
 	}
 
-	ppid.getNextId();
-	cout << "Expected: seqNum: 128, inner: 1536, middle: 1, outer: 1\n" << endl;
+	if (ppid.createId() != 25769807873) {
+		cout << "ERROR: Expected: unified id: 25769807873, seqNum: 128, inner: 1536, middle: 1, outer: 1\n" << endl;
+	}
 
-	ppid.getNextId();
-	cout << "Expected: seqNum: 129, inner: 1536, middle: 1, outer: 33\n" << endl;
+	if (ppid.createId() != 25769807905) {
+		cout << "ERROR: Expected: unified id: 25769807905, seqNum: 129, inner: 1536, middle: 1, outer: 33\n" << endl;
+	}
 
 	for (int i=0; i<126; i++) {
 		ppid.getNexSeqNum();
 	}
 
-	ppid.getNextId();
-	cout << "Expected: seqNum: 256, inner: 1536, middle: 2, outer: 1\n" << endl;
+	if (ppid.createId() != 25769811969) {
+		cout << "ERROR: Expected: unified id: 25769811969, seqNum: 256, inner: 1536, middle: 2, outer: 1\n" << endl;
+	}
 
 
 	cout << "Done testing." << endl;

@@ -57,7 +57,7 @@ uint32_t PushPacketId::getNexSeqNum() {
 }
 
 
-uint16_t PushPacketId::getInnerVlan(uint32_t seqNumber) {
+uint16_t PushPacketId::createInnerVlan(uint32_t seqNumber) {
 	uint16_t temp;
 
 	// extract the 9 left-most bits among the 28 bits (although there are 32 bits, only the first 28 are in use)
@@ -68,7 +68,7 @@ uint16_t PushPacketId::getInnerVlan(uint32_t seqNumber) {
 }
 
 
-uint16_t PushPacketId::getMiddleVlan(uint32_t seqNumber) {
+uint16_t PushPacketId::createMiddleVlan(uint32_t seqNumber) {
 	uint16_t temp;
 
 	// remove the 7 right-most bits (they are part of the inner vlan)
@@ -79,7 +79,7 @@ uint16_t PushPacketId::getMiddleVlan(uint32_t seqNumber) {
 }
 
 
-uint16_t PushPacketId::getOuterVlan(uint32_t seqNumber) {
+uint16_t PushPacketId::createOuterVlan(uint32_t seqNumber) {
 	uint16_t temp;
 
 	// extract the 7 right-most bits
@@ -93,16 +93,20 @@ uint16_t PushPacketId::getOuterVlan(uint32_t seqNumber) {
 
 
 
-uint64_t PushPacketId::getNextId() {
-
-	uint16_t innerVlan, middleVlan, outerVlan;
+uint64_t PushPacketId::createId() {
 
 	// nextSeqNum constitute of at most 28 bits.
 	uint32_t nextSeqNum = getNexSeqNum();
 
-	cout << "seqNum: " << nextSeqNum << ", inner: " << getInnerVlan(nextSeqNum) << ", middle: " << getMiddleVlan(nextSeqNum) << ", outer: " << getOuterVlan(nextSeqNum) << endl;
+	uint64_t innerVlan = createInnerVlan(nextSeqNum);
+	uint64_t middleVlan = createMiddleVlan(nextSeqNum);
+	uint64_t outerVlan = createOuterVlan(nextSeqNum);
 
-	return 0;
+	uint64_t unified = (innerVlan << 24) | (middleVlan << 12) | outerVlan;
+
+	cout << "unified id: " << unified << ", seqNum: " << nextSeqNum << ", inner: " << innerVlan << ", middle: " << middleVlan << ", outer: " << outerVlan << endl;
+
+	return unified;
 }
 
 //CLICK_ENDDECLS

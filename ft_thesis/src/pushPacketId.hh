@@ -19,10 +19,10 @@ public:
 	PushPacketId(uint8_t);
 	bool isValidSeqNum(uint32_t);
 	uint32_t getNexSeqNum();
-	uint16_t getInnerVlan(uint32_t);
-	uint16_t getMiddleVlan(uint32_t);
-	uint16_t getOuterVlan(uint32_t);
-	uint64_t getNextId();
+	uint16_t createInnerVlan(uint32_t);
+	uint16_t createMiddleVlan(uint32_t);
+	uint16_t createOuterVlan(uint32_t);
+	uint64_t createId();
 	const uint32_t MAX_SEQ_NUM = 268435456; // (2^28 -1) - there are 28 (36-5-3) bits for sequence numbers
 
 //private:
