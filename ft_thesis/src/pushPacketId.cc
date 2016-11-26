@@ -10,6 +10,7 @@
 //#include <click/straccum.hh>
 //#include <click/args.hh>
 #include "pushPacketId.hh"
+#include <stdint.h>
 #include <iostream>
 using namespace std;
 //CLICK_DECLS
