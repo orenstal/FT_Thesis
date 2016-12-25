@@ -167,7 +167,7 @@ PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 		return p;
 	} else if (WritablePacket *q = p->push(4)) {
 		memmove(q->data(), q->data() + 4, 12);
-		click_ether_vlan *vlan = reinterpret_cast<click_ether_vlan *>(q->data());
+		click_ether_vlan *vlan = reinterpret_cast<click_ether_vlan *>(q->data()+4);
 		vlan->ether_vlan_proto = htons(ETHERTYPE_8021Q);
 		vlan->ether_vlan_tci = tci;
 		q->set_mac_header(q->data(), sizeof(vlan));
@@ -202,6 +202,8 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 	q = pushVlanLayer(q, middleVlan);
 	q = pushVlanLayer(q, outerVlan);
 
+	SET_PACKID_ANNO(q, unified);
+	cout << "set packet id anno: " << PACKID_ANNO(q) << endl;
 	return q;
 
 //	if (_use_anno)
