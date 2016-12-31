@@ -5,8 +5,8 @@
  *      Author: Tal
  */
 
-#ifndef TCP_SERVER_SERVER_HH_
-#define TCP_SERVER_SERVER_HH_
+#ifndef TCP_SERVERS_SERVER_HH_
+#define TCP_SERVERS_SERVER_HH_
 
 #include <pthread.h>
 #include <stdio.h>
@@ -15,10 +15,16 @@
 #include <iostream>
 #include <set>
 #include <sys/select.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 
 #define PORT 9095	// port to listening on
-#define GPAL_VAL_SIZE 50
+#define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
+#define NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX 7
+#define SERVER_BUFFER_SIZE SERVER_BUFFER_SIZE_WITHOUT_PREFIX+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX
+#define RESPONSE_STATE_SUCCESS "1"
+#define RESPONSE_STATE_FAILURE "0"
 using namespace std;
 
 class Server;
@@ -30,6 +36,7 @@ struct ThreadArgs {
 
 class Server {
 	private:
+		pthread_mutex_t master_set_mtx;			// mutex for master fd_set protection
 		fd_set master;					// master file descriptor list
 		fd_set read_fds;				// temp file descriptor list for select()
 		struct sockaddr_in serveraddr;	// server address
@@ -56,10 +63,14 @@ class Server {
 
 		void readCommonClientRequest(int sockfd, char* msg, int* msgLen);
 		int receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes);
+		void writeResponseToClient(int sockfd, bool succeed);
 		int checkLength (char* num, int length, int minimalExpectedValue);
+		void printMsg(char* msg, int msgLen);
 
-		void* deserializeClientRequest(char* msg, int msgLen);
-		void processRequest(void*);
+	protected:
+		virtual void* deserializeClientRequest(char* msg, int msgLen);
+		virtual bool processRequest(void*);
+		virtual void freeObject(void* obj);
 
 	public:
 		Server();
@@ -67,4 +78,4 @@ class Server {
 		bool run();
 };
 
-#endif /* TCP_SERVER_SERVER_HH_ */
+#endif /* TCP_SERVERS_SERVER_HH_ */
