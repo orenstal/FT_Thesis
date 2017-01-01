@@ -120,7 +120,7 @@ bool Server::run() {
 
 void Server::addNewClient() {
 	cout << "adding new client" << endl;
-	int addrlen = sizeof(clientaddr);
+	socklen_t addrlen = sizeof(clientaddr);
 	if((newfd = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1) {
 		cout << "ERROR: Server-accept() error lol!" << endl;
 	} else {
