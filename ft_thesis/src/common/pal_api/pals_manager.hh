@@ -27,10 +27,12 @@ typedef struct gpal {
     char val[GPAL_VAL_SIZE];
 } gpal;
 
+
 typedef struct spal {
     uint16_t var_id;
     uint32_t seq_num;
 } spal;
+
 
 void serializeGPal(gpal* gpal, char* serializedMsg) {
 	uint16_t *q = (uint16_t*)serializedMsg;

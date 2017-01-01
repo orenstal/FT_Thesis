@@ -19,7 +19,6 @@
 #include <sys/socket.h>
 
 
-#define PORT 9095	// port to listening on
 #define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
 #define NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX 7
 #define SERVER_BUFFER_SIZE SERVER_BUFFER_SIZE_WITHOUT_PREFIX+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX
@@ -36,6 +35,7 @@ struct ThreadArgs {
 
 class Server {
 	private:
+		int port;
 		pthread_mutex_t master_set_mtx;			// mutex for master fd_set protection
 		fd_set master;					// master file descriptor list
 		fd_set read_fds;				// temp file descriptor list for select()
@@ -70,10 +70,10 @@ class Server {
 	protected:
 		virtual void* deserializeClientRequest(char* msg, int msgLen);
 		virtual bool processRequest(void*);
-		virtual void freeObject(void* obj);
+		virtual void freeDeserializedObject(void* obj);
 
 	public:
-		Server();
+		Server(int port);
 		void init();
 		bool run();
 };
