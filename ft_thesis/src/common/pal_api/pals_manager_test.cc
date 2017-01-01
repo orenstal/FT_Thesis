@@ -19,18 +19,18 @@ class PALSManagerTest {
 		}
 
 		void runTest() {
-			PALSManager* pm = new PALSManager();
-			gpal gp_1 = {1, "first_gpal_1"};
+			PALSManager* pm = new PALSManager(1, 333L);
+			gpal gp_1 = {1, "first_gpal_1\n"};
 			spal sp_1 = {1, 1};
 			spal sp_3 = {1, 3};
 			spal sp_4 = {2, 1};
-			gpal gp_3 = {2, "first_gpal_2"};
+			gpal gp_3 = {2, "first_gpal_2\n"};
 
 			pm->addGPal(&gp_1);
 			pm->addSPal(&sp_1);
 			pm->createSPalAndAdd(1,2);
 			pm->addSPal(&sp_3);
-			pm->createGPalAndAdd(1, "second_gpal_1");
+			pm->createGPalAndAdd(1, "second_gpal_1\n");
 			pm->addSPal(&sp_4);
 			pm->addGPal(&gp_3);
 
