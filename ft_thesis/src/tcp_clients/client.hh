@@ -8,9 +8,7 @@
 #ifndef TCP_SERVER_CLIENT_HH_
 #define TCP_SERVER_CLIENT_HH_
 
-#include <string>
 #include <netinet/in.h>
-#include <iostream>
 #include<sys/socket.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +18,9 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+
+// todo for click usage
+//CLICK_DECLS
 
 
 #define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
@@ -43,6 +44,6 @@ public:
 	bool sendMsgAndWait(char* serialized, int length);
 };
 
-
+//CLICK_ENDDECLS
 
 #endif /* TCP_SERVER_CLIENT_HH_ */

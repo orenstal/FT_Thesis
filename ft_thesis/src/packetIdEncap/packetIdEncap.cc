@@ -23,6 +23,7 @@
  */
 
 #include <click/config.h>
+#include "client.hh"
 #include "packetIdEncap.hh"
 #include <click/etheraddress.hh>
 #include <click/args.hh>
@@ -32,10 +33,73 @@
 #include <click/glue.hh>
 #include <clicknet/ether.h>
 
+#include <pthread.h>
+#include <netinet/in.h>
+#include <iostream>
+#include<sys/socket.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+
+#include "../common/wrappedPacketData/wrapped_packet_data.hh"
+
+
 
 #include <iostream>
 using namespace std;
 CLICK_DECLS
+
+
+class PacketLoggerClient : public Client {
+
+protected:
+	void serializeObject(void* obj, char* serialized, int* len);
+
+public:
+	PacketLoggerClient(int port, char* address) : Client(port, address) {
+		// do nothing
+		printf("in PacketLoggerClient ctor");
+	}
+ };
+
+void PacketLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
+	click_chatter("PacketLoggerClient::serializeObject");
+//	cout << "PacketLoggerClient::serializeObject" << endl;
+	WrappedPacketData* wpd = (WrappedPacketData*)obj;
+	uint16_t size = wpd->size;
+
+	uint64_t *q = (uint64_t*)serialized;
+	*q = wpd->packetId;
+	q++;
+
+	uint16_t *p = (uint16_t*)q;
+	*p = wpd->offset;
+	p++;
+
+	*p = size;
+	p++;
+
+	char *r = (char*)p;
+
+	for (int i=0; i< size; i++, r++) {
+		*r = wpd->data[i];
+	}
+
+	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
+
+//	cout << "len is: " << *len << endl;
+	click_chatter("len is: %d", *len);
+}
+
+
+
+
+
 
 PacketIdEncap::PacketIdEncap()
 {
@@ -56,6 +120,18 @@ PacketIdEncap::configure(Vector<String> &conf, ErrorHandler *errh)
 		return -1;
 
 	_producerId = producerId;
+
+	client = new PacketLoggerClient(9097, "10.0.0.4");
+	client->connectToServer();
+
+	// todo this code works and designed for listening to master/slave changes (not for the regular behavior)
+//	pthread_t t1;
+//	pthread_create(&t1, NULL, &PacketIdEncap::print_message, NULL);
+
+	cout << "continue.." << endl;
+
+
+
     return 0;
 }
 
@@ -74,6 +150,50 @@ bool PacketIdEncap::isValidSeqNum(uint32_t candidate) {
 
 	return true;
 }
+
+void* PacketIdEncap::print_message(void* args) {
+	cout << "Hi from thread.." << endl;
+	connectToServer(9097, "10.0.0.4");
+	cout << "connected ??" << endl;
+	while (1) {
+
+	}
+
+	return NULL;
+}
+
+int PacketIdEncap::connectToServer(int port, char* address) {
+	struct sockaddr_in sock_addr_server;
+	sock_addr_server.sin_family = AF_INET;
+	sock_addr_server.sin_addr.s_addr = inet_addr(address); // = INADDR_ANY;
+	sock_addr_server.sin_port = htons(port);
+	memset(&(sock_addr_server.sin_zero), '\0', 8);
+
+	int sockfd = -1;
+
+	//Create socket
+	sockfd = socket(AF_INET , SOCK_STREAM , 0);
+	if (sockfd == -1) {
+		cout << "ERROR: Could not create socket" << endl;
+	}
+
+	cout << "Socket created" << endl;
+
+	// activate keep-alive mechanism
+//	int val = 1;
+//	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
+
+	//Connect to remote server
+	if (connect(sockfd , (struct sockaddr *)&sock_addr_server , sizeof(sock_addr_server)) < 0) {
+		cout << "ERROR: Connect failed." << endl;
+		return -1;
+	}
+
+	cout<<"Connected\n";
+
+	return sockfd;
+}
+
 
 // sequence number constitutes of 2^28 -1 bits (except 3 bits for producer id and 5 bits for version).
 // Overall we have 36 bits (12 for each vlan level).
@@ -151,7 +271,7 @@ uint64_t PacketIdEncap::createId() {
 Packet *
 PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 {
-	cout << "[PacketIdEncap] Start pushing vlan layer with tci: " << vlan_tci << endl;
+	cout << "[PacketIdEncap] ~Start pushing vlan layer with tci: " << vlan_tci << endl;
 
 	if (p == 0) {
 		cout << "[PacketIdEncap] Error: invalid packet" << endl;
@@ -166,7 +286,7 @@ PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 		cout << "[PacketIdEncap] Problem while pusing vlan tci: " << vlan_tci << endl;
 		return p;
 	} else if (WritablePacket *q = p->push(4)) {
-		memmove(q->data(), q->data() + 4, 12);
+		memmove(q->data(), q->data() + 4, 16);
 		click_ether_vlan *vlan = reinterpret_cast<click_ether_vlan *>(q->data()+4);
 		vlan->ether_vlan_proto = htons(ETHERTYPE_8021Q);
 		vlan->ether_vlan_tci = tci;
@@ -180,13 +300,51 @@ PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 }
 
 
+// todo for testing...
+
+WrappedPacketData* prepareTest1() {
+	cout << "preparing test 1" << endl;
+
+	WrappedPacketData* wpd = new WrappedPacketData;
+	wpd->packetId = 193L;
+	wpd->offset = 12;
+	wpd->size = 15;
+
+	char data[wpd->size];
+	memset(data, 0, wpd->size);
+
+	for (int i=0; i< wpd->size; i++) {
+		data[i] = 'a';
+	}
+
+	wpd->data = data;
+
+	return wpd;
+}
+
+void PacketIdEncap::runTest(WrappedPacketData* wpd) {
+	cout << "PacketIdEncap::runTest" << endl;
+	char serialized[SERVER_BUFFER_SIZE];
+	int len;
+
+	client->prepareToSend((void*)wpd, serialized, &len);
+
+	bool isSucceed = client->sendMsgAndWait(serialized, len);
+
+	if (isSucceed) {
+		cout << "succeed to send" << endl;
+	} else {
+		cout << "failed to send" << endl;
+	}
+
+}
+
+// done testing part
+
+
 Packet *
 PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 {
-
-	if (!p->has_transport_header())
-		return p;
-
 	// nextSeqNum constitute of at most 28 bits.
 	uint32_t nextSeqNum = getNexSeqNum();
 
@@ -203,7 +361,15 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 	q = pushVlanLayer(q, outerVlan);
 
 	SET_PACKID_ANNO(q, unified);
-	cout << "set packet id anno: " << PACKID_ANNO(q) << endl;
+    cout << "set packet id anno: " << PACKID_ANNO(q)  << endl;
+
+    // todo for testing..
+    cout << "start running test..." << endl;
+	WrappedPacketData* wpd = prepareTest1();
+	runTest(wpd);
+	delete wpd;
+	cout << "done testing.." << endl;
+
 	return q;
 
 //	if (_use_anno)
@@ -248,7 +414,7 @@ PacketIdEncap::add_handlers()
 }
 
 CLICK_ENDDECLS
+ELEMENT_REQUIRES(TCPClient)
 EXPORT_ELEMENT(PacketIdEncap PacketIdEncap-PacketIdEncap)
-
 
 

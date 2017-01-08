@@ -5,9 +5,16 @@
  *      Author: Tal
  */
 
+
 #include "client.hh"
 
-#include <sstream>
+using namespace std;
+
+// todo for click usage. Comment for local interface.
+#include <click/config.h>
+#include <click/args.hh>
+#include <click/glue.hh>
+CLICK_DECLS
 
 
 Client::Client(int port, char* address) {
@@ -23,84 +30,95 @@ void Client::connectToServer() {
 	//Create socket
 	sockfd = socket(AF_INET , SOCK_STREAM , 0);
 	if (sockfd == -1) {
-		cout << "ERROR: Could not create socket" << endl;
+//		cout << "ERROR: Could not create socket" << endl;
+		printf("ERROR: Could not create socket\n");
 	}
 
-	cout << "Socket created" << endl;
+	printf("Socket created\n");
+//	cout << "Socket created" << endl;
 
 	// activate keep-alive mechanism
-	int val = 1;
-	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
+//	int val = 1;
+//	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
 
 	//Connect to remote server
 	if (connect(sockfd , (struct sockaddr *)&sock_addr_server , sizeof(sock_addr_server)) < 0) {
-		cout << "ERROR: Connect failed." << endl;
+//		click << "ERROR: Connect failed." << endl;
+		printf("ERROR: Connect failed.\n");
 		return;
 	}
 
-	cout<<"Connected\n";
+	printf("Connected\n");
 }
 
 void Client::serializeObject(void* obj, char* serialized, int* len) {
-	cout << "Client::serializeObject" << endl;
+	printf("Client::serializeObject\n");
+	//	cout << "Client::serializeObject" << endl;
 }
 
 /*
  * This function returns a string representation of length numOfDigits for the inserted number. If the number's
  * length is smaller than numOfDigits, we pad the returned string with 0 at the beginning appropriately.
  */
-string intToStringDigits (int number, uint8_t numOfDigits)
+void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 {
-	string numAsString;
-	stringstream ss;
-	ss << number;
-	numAsString = ss.str();
-	while (numAsString.size() != numOfDigits)
-	{
-		numAsString = "0" + numAsString;
-	}
-
-	return numAsString;
+	sprintf(numAsStr, "%0*d", numOfDigits, number);
 }
 
 void Client::prepareToSend(void* obj, char* serialized, int* len) {
+	printf("Client::prepareToSend\n");
 	// we leave NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX (7) digits for the serialization length
 	serializeObject(obj, serialized + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, len);
+	printf("Client::done serializing\n");
 
-	string lenPrefix = intToStringDigits(*len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
+	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
+	intToStringDigits(*len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, numAsStr);
 
-	cout << "lenPrefix is: " << lenPrefix << endl;
+	printf("numAsStr is: %s\n", numAsStr);
+//	cout << "lenPrefix is: " << lenPrefix << endl;
+	printf("len is: %d\n", *len);
 
 	for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
-		serialized[i] = lenPrefix[i];
+		printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
+		serialized[i] = numAsStr[i];
 	}
 
 	*len += NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX;
-
+	printf("len is: %d\n", *len);
+	printf("[Client::prepareToSend] Done\n");
+	fflush(stdout);
 }
 
 bool Client::sendMsg(char* serialized, int length) {
-	cout << "in sendMsg.. length: " << length << ", msg: ";
+	printf("in sendMsg.. length: %d, msg:", length);
+	//	cout << "in sendMsg.. length: " << length << ", msg: ";
+
 	// print message content
 	for(int i=0; i< length; i++) {
-		cout << serialized[i];
+		printf("%c", serialized[i]);
+//		cout << serialized[i];
 	}
-	cout << endl;
+
+	printf("\n");
+//	cout << endl;
 
 
 	int totalSentBytes = 0;
 
 	if (length > SERVER_BUFFER_SIZE) {
-		cout << "ERROR: can't send message that is longer than " << SERVER_BUFFER_SIZE << endl;
+		printf("ERROR: can't send message that is longer than %d\n", SERVER_BUFFER_SIZE);
+//		cout << "ERROR: can't send message that is longer than " << SERVER_BUFFER_SIZE << endl;
 		return false;
 	}
 
 	// Write the message to the server
 	while (totalSentBytes < length) {
+		printf("sending..\n");
 		int ret = send(sockfd, serialized, length - totalSentBytes, 0);
 
 		if (ret == 0) {
-			cout << "ERROR: The server is terminated. exit..";
+			printf("ERROR: The server is terminated. exit..\n");
+//			cout << "ERROR: The server is terminated. exit..";
 			exit(1);
 		}
 
@@ -109,7 +127,8 @@ bool Client::sendMsg(char* serialized, int length) {
 			ret = send(sockfd, serialized, length - totalSentBytes, 0);
 
 			if (ret == 0) {
-				cout << "ERROR: The server is terminated. exit..";
+				printf("ERROR: The server is terminated. exit..\n");
+//				cout << "ERROR: The server is terminated. exit..";
 				exit(1);
 			}
 
@@ -122,7 +141,8 @@ bool Client::sendMsg(char* serialized, int length) {
 		serialized += ret;
 	}
 
-	cout << "totalSentBytes: " << totalSentBytes << endl;
+	printf("totalSentBytes: %d\n", totalSentBytes);
+//	cout << "totalSentBytes: " << totalSentBytes << endl;
 
 	return true;
 
@@ -132,7 +152,8 @@ bool Client::sendMsgAndWait(char* serialized, int length) {
 	sendMsg(serialized, length);
 	char status[1];
 
-	cout << "wait for receive" << endl;
+	printf("wait for receive\n");
+	//	cout << "wait for receive" << endl;
 	int ret = recv(sockfd, status, 1, 0);
 
 	if (ret < 0) {
@@ -141,13 +162,22 @@ bool Client::sendMsgAndWait(char* serialized, int length) {
 	}
 
 	if (ret < 0) {
-		cout << "ERROR: got failure status!" << endl;
+		printf("ERROR: got failure status!\n");
+//		cout << "ERROR: got failure status!" << endl;
 		return false;
 	}
 
-	cout << "got success status" << endl;
+	printf("got success status\n");
+//	cout << "got success status" << endl;
 	return true;
 }
+
+// todo for click usage.
+CLICK_ENDDECLS
+ELEMENT_PROVIDES(TCPClient)
+
+
+
 
 //int main(int argc, char *argv[])
 //{
