@@ -9,6 +9,7 @@
 #define PACKETIDENCAP_PACKETIDENCAP_HH_
 
 #include <click/element.hh>
+#include <click/packet_anno.hh>
 
 #include <stdio.h>
 #include <string.h>
@@ -48,9 +49,14 @@ class PacketIdEncap : public Element { public:
   private:
 	uint64_t _seqNum;
 	uint8_t _producerId;
+	bool _isMasterMode;
+	bool _onlyHeader;
 	Client *client;
 
-	void runTest(WrappedPacketData* wpd);
+	int getHeadersLen(Packet *p);
+	int getPacketLen(Packet *p);
+	WrappedPacketData* fillWPD(Packet *p);
+	void sendToLogger(WrappedPacketData* wpd);
 
 	static String read_handler(Element *e, void *user_data) CLICK_COLD;
 	static int write_handler(const String &str, Element *e, void *user_data, ErrorHandler *errh) CLICK_COLD;

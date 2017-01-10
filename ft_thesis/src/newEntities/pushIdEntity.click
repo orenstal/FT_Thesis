@@ -12,7 +12,7 @@ FromDevice("h2-eth0")
 //        -> CheckIPHeader(14, CHECKSUM false)
 //        -> tcpClassifier
         -> Unstrip(4)
-        -> PacketIdEncap(3)
+        -> PacketIdEncap(3, true, false)
 	-> out;
 
 classifier[1] -> out;
