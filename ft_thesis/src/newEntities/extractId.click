@@ -12,7 +12,11 @@ FromDevice("h3-eth0")
 //        -> CheckIPHeader(14, CHECKSUM false)
 //        -> tcpClassifier
 //        -> Unstrip(4)
-        -> Print()
+        -> preparePacket()
+		-> Print()
+		-> increaseVersionNumber
+		-> setIdAnno
+		-> Print()
 		-> Discard;
 
 classifier[1] -> Discard;

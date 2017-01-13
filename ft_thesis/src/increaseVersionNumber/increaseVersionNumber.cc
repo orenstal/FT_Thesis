@@ -16,7 +16,8 @@
 #include <clicknet/ether.h>
 #include <click/packet_anno.hh>
 
-#include "pals_manager.hh"
+//#include "pals_manager.hh"
+#include "../common/pal_api/pals_manager.hh"
 #include <iostream>
 using namespace std;
 CLICK_DECLS

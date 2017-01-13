@@ -10,7 +10,6 @@
 
 #include <pthread.h>
 #include <stdio.h>
-#include <string>
 #include <string.h>
 #include <iostream>
 
@@ -34,7 +33,7 @@ typedef struct spal {
 } spal;
 
 
-void serializeGPal(gpal* gpal, char* serializedMsg) {
+static void serializeGPal(gpal* gpal, char* serializedMsg) {
 	uint16_t *q = (uint16_t*)serializedMsg;
 	*q = gpal->var_id;
 	q++;

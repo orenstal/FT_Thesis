@@ -16,12 +16,20 @@
 using namespace std;
 
 
+typedef struct ServerProgressData {
+    vector<int> packet_ids_vector;
+    uint8_t index;
+} ServerProgressData;
+
+
 typedef struct PacketData {
     vector<spal*> spal_vector;
     vector<gpal*> gpal_vector;
     uint8_t spal_index;
     uint8_t gpal_index;
 } PacketData;
+
+typedef map<uint16_t, ServerProgressData* >::iterator SPDIterType;
 
 typedef map<uint16_t, map<uint64_t, PacketData*> >::iterator MbDataIterType;
 typedef map<uint64_t, PacketData*>::iterator PacketDataIterType;
@@ -30,7 +38,14 @@ class DetLoggerServer : public Server {
 
 private:
 	map<uint16_t, map<uint64_t, PacketData*> > detData;
+	map<uint16_t, ServerProgressData* > progressData;
 
+	// progress data
+	ServerProgressData* getOrCreateServerProgressData(int mbId);
+	void addPacketId(uint64_t pid, ServerProgressData* spd);
+	void printProgressDataState();
+
+	// pals content
 	PacketData* getPacketData(PALSManager* pm);
 	void updatePacketData(PacketData* packetData, PALSManager* pm);
 	void printState();
@@ -61,6 +76,9 @@ bool DetLoggerServer::processRequest(void* obj) {
 
 	PacketData* packetData = getPacketData(pm);
 	updatePacketData(packetData, pm);
+
+	ServerProgressData* packetIds = getOrCreateServerProgressData(pm->getMBId());
+	addPacketId(pm->getPacketId(), packetIds);
 	printState();
 
 	return true;
@@ -118,6 +136,29 @@ PacketData* DetLoggerServer::getPacketData(PALSManager* pm) {
 	return packetData;
 }
 
+
+void DetLoggerServer::addPacketId(uint64_t pid, ServerProgressData* spd) {
+
+	spd->packet_ids_vector.push_back(pid);
+	spd->index++;
+}
+
+ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(int mbId) {
+	ServerProgressData* spd;
+
+	cout << "progressData.count(" << mbId << "): " << progressData.count(mbId) << endl;
+	if (!progressData.count(mbId)) {
+		spd = new ServerProgressData();
+		progressData[mbId] = spd;
+	} else {
+		spd = progressData[mbId];
+	}
+
+	return spd;
+}
+
+
+
 void DetLoggerServer::printState() {
 	for (MbDataIterType mbIter = detData.begin(); mbIter != detData.end(); mbIter++) {
 		uint16_t mbId = mbIter->first;
@@ -147,6 +188,26 @@ void DetLoggerServer::printState() {
 
 			cout << "-------------------------------------" << endl;
 		}
+	}
+
+	printProgressDataState();
+}
+
+void DetLoggerServer::printProgressDataState() {
+	cout << "Progress Data State:" << endl;
+	for (SPDIterType iter = progressData.begin(); iter != progressData.end(); iter++) {
+		cout << "mbId: " << iter->first << ":" << endl;
+		ServerProgressData* spd = iter->second;
+
+		int numOfPacketIds = spd->index;
+
+		cout << "number of packet ids: " << numOfPacketIds << "\n";
+
+		for (int i=0; i<numOfPacketIds; i++) {
+			cout << spd->packet_ids_vector[i] << ", ";
+		}
+
+		cout << "\n-------------------------------------" << endl;
 	}
 }
 

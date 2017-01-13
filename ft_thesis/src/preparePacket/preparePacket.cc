@@ -18,8 +18,10 @@
 
 #include <iostream>
 
-#include "pals_manager.hh"
+//#include "pals_manager.hh"
 #include "preparePacket.hh"
+#include "../common/pal_api/pals_manager.hh"
+
 using namespace std;
 CLICK_DECLS
 
@@ -82,11 +84,20 @@ PreparePacket::smaction(Packet *p)	// main logic
 	cout << "set packet id was completed. getAnno is: " << PACKID_ANNO(p) << endl;
 
 	PALSManager* pm = new PALSManager();
+
+	//test
+	pm->createGPalAndAdd(1, "test\0");
+
 	SET_PALS_MANAGER_REFERENCE_ANNO(p, (uintptr_t)pm);
 	cout << "set pals_manager was completed." << endl;
 
-	//test
-	pm->createGPalAndAdd(1, "test");
+	gpal* newGPalsList = pm->getGPalList();
+	int test = newGPalsList[0].var_id;
+	cout << "gpal var id: " << test << "." << endl;
+	char* text = newGPalsList[0].val;
+	cout << "gpal val is: " << text << endl;
+
+
 	return p;
 
 }

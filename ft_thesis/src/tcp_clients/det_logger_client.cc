@@ -69,6 +69,15 @@ PALSManager* prepareTest3() {
 	return pm;
 }
 
+PALSManager* prepareTest4() {
+	cout << "preparing test 4" << endl;
+
+	PALSManager* pm = new PALSManager(2, 331L);
+	gpal gp_1 = {1, "test 4\0"};
+	pm->addGPal(&gp_1);
+	return pm;
+}
+
 void runTestAndCompare(DetLoggerClient *client) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
@@ -112,6 +121,7 @@ void runTestAndCompare(DetLoggerClient *client) {
 		cout << "deserialize was failed" << endl;
 	}
 
+	delete pm1;
 	delete pm;
 }
 
@@ -149,6 +159,11 @@ int main () {
 	pm = prepareTest3();
 	runTest(client, pm);
 	delete pm;
+
+	cout << "\nstart running test 4..." << endl;
+	PALSManager* pm1 = prepareTest4();
+	runTest(client, pm1);
+	delete pm1;
 
 	return 0;
 }
