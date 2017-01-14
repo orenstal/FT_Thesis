@@ -345,9 +345,14 @@ int PacketIdEncap::getHeadersLen(Packet *p) {
 	unsigned transport_header_len = 0;
 	const click_ip *iph = p->ip_header();
 
-	if (!p->has_network_header()) {
-		return -1;
+	if (p->mac_header() == p->data()) {
+		cout << "getHeadersLen: network header wasn't set. Using default sizes!!" << endl;
+		return sizeof(click_ether) + sizeof(click_ip);
 	}
+
+//	if (!p->has_network_header()) {
+//		return -1;
+//	}
 
 	cout << "has transport? " << p->has_transport_header() << endl;
 
@@ -486,13 +491,15 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 	SET_PACKID_ANNO(q, unified);
     cout << "set packet id anno: " << PACKID_ANNO(q)  << endl;
 
-    // todo for testing..
 	if (_isMasterMode) {
 		cout << "start running test..." << endl;
 		WrappedPacketData* wpd = fillWPD(q);	//prepareTest1();
 		sendToLogger(wpd);
-		delete wpd->data;
-		delete wpd;
+
+		if (wpd != NULL) {
+			delete wpd->data;
+			delete wpd;
+		}
 		cout << "done testing.." << endl;
 	} else {
 		cout << "Doesn't need to send packet to logger - slave mode" << endl;
