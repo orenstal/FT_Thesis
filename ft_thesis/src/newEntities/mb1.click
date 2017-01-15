@@ -14,8 +14,9 @@ FromDevice("h6-eth0")
 	-> Unstrip(16)
 	-> preparePacket()
 	-> Print()
-	-> ditributePacketRecords(1, 1)
+//	-> ditributePacketRecords(1, false)
 	-> increaseVersionNumber
+	-> ditributePacketRecords(1, true)	/*this element should be the last one before out or discard elements!!*/
 //	-> setIdAnno
 	-> out;
 
