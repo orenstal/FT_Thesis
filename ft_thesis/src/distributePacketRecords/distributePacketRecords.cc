@@ -108,8 +108,13 @@ DistributePacketRecords::configure(Vector<String> &conf, ErrorHandler *errh)
 	cout << "_mbId: " << _mbId << endl;
 
 	if (_isMasterMode) {
-		client = new DetLoggerClient(9095, "10.0.0.5");
-		client->connectToServer();
+		detLoggerClient = new DetLoggerClient(9095, "10.0.0.5");
+		detLoggerClient->connectToServer();
+
+		// todo slaveNotifierClient = ...
+	} else {
+		detLoggerClient = new DetLoggerClient(9095, "10.0.0.5");	// todo should be address of slave progress logger server
+		detLoggerClient->connectToServer();
 	}
 
 	// todo this code works and designed for listening to master/slave changes (not for the regular behavior)
@@ -179,9 +184,9 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	client->prepareToSend((void*)pm, serialized, &len);
+	detLoggerClient->prepareToSend((void*)pm, serialized, &len);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -191,33 +196,52 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 
 }
 
+Packet *
+DistributePacketRecords::smactionMaster(Packet *p)
+{
+	cout << "start distributing packet records..." << endl;
+	PALSManager* pm =(PALSManager *)PALS_MANAGER_REFERENCE_ANNO(p);
+	pm->setMBId(_mbId);
+	pm->setPacketId(PACKID_ANNO(p));
+
+
+	gpal* newGPalsList = pm->getGPalList();
+	int test = newGPalsList[0].var_id;
+	cout << "gpal var id: " << test << "." << endl;
+	char* text = newGPalsList[0].val;
+	cout << "gpal val is: " << text << endl;
+
+
+	sendToLogger(pm);
+	// todo: notify slave !!
+	delete pm;
+	cout << "done distribution.." << endl;
+
+	return p;
+}
+
+Packet *
+DistributePacketRecords::smactionSlave(Packet *p)
+{
+	cout << "Slave mode - sending only data for 'progress logger'" << endl;
+
+	PALSManager* pm = new PALSManager (_mbId, PACKID_ANNO(p));
+
+	sendToLogger(pm);
+	delete pm;
+	cout << "done distribution.." << endl;
+
+	return NULL; // prevent the packet from be sent again (only master should send packets)
+}
 
 Packet *
 DistributePacketRecords::smaction(Packet *p)	// main logic - should be changed
 {
 	if (_isMasterMode) {
-		cout << "start distributing packet records..." << endl;
-		PALSManager* pm =(PALSManager *)PALS_MANAGER_REFERENCE_ANNO(p);
-		pm->setMBId(_mbId);
-		pm->setPacketId(PACKID_ANNO(p));
-
-
-		gpal* newGPalsList = pm->getGPalList();
-		int test = newGPalsList[0].var_id;
-		cout << "gpal var id: " << test << "." << endl;
-		char* text = newGPalsList[0].val;
-		cout << "gpal val is: " << text << endl;
-
-
-		sendToLogger(pm);
-		// todo: notify slave !!
-		delete pm;
-		cout << "done distribution.." << endl;
+		return smactionMaster(p);
 	} else {
-		cout << "Doesn't need to send packet records to logger - slave mode" << endl;
+		return smactionSlave(p);
 	}
-
-	return p;
 }
 
 

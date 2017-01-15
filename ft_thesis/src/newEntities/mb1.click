@@ -16,7 +16,7 @@ FromDevice("h6-eth0")
 	-> Print()
 	-> ditributePacketRecords(1, 1)
 	-> increaseVersionNumber
-	-> setIdAnno
+//	-> setIdAnno
 	-> out;
 
 classifier[1] -> out;

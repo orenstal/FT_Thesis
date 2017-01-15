@@ -40,8 +40,11 @@ class DistributePacketRecords : public Element { public:
 	
 	uint16_t _mbId;
 	bool _isMasterMode;
-	Client *client;
+	Client *detLoggerClient;
+	Client *slaveNotifierClient;
 	
+	Packet *smactionMaster(Packet *p);
+	Packet *smactionSlave(Packet *p);
 	void sendToLogger(void* pm);
 
 	static String read_handler(Element *e, void *user_data) CLICK_COLD;
