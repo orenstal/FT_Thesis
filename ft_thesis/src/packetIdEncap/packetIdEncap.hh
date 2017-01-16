@@ -55,7 +55,7 @@ class PacketIdEncap : public Element { public:
 
 	int getHeadersLen(Packet *p);
 	int getPacketLen(Packet *p);
-	WrappedPacketData* fillWPD(Packet *p);
+	WrappedPacketData* createWPD(Packet *p);
 	void sendToLogger(WrappedPacketData* wpd);
 
 	static String read_handler(Element *e, void *user_data) CLICK_COLD;

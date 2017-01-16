@@ -22,7 +22,9 @@
 #define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
 #define NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX 7
 #define NUM_OF_DIGITS_FOR_COMMAND_PREFIX 1
+#define NUM_OF_DIGITS_FOR_RET_VAL_STATUS 1
 #define SERVER_BUFFER_SIZE SERVER_BUFFER_SIZE_WITHOUT_PREFIX+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX
+#define MAX_RET_VAL_LENGTH 5120	// 5K
 #define RESPONSE_STATE_SUCCESS "1"
 #define RESPONSE_STATE_FAILURE "0"
 using namespace std;
@@ -64,13 +66,14 @@ class Server {
 
 		void readCommonClientRequest(int sockfd, char* msg, int* msgLen, int* command);
 		int receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes);
-		void writeResponseToClient(int sockfd, bool succeed);
+		bool sendMsg(int sockfd, char* retVal, int length);
+		void writeResponseToClient(int sockfd, bool succeed, char* retVal, int retValLen);
 		int checkLength (char* num, int length, int minimalExpectedValue);
 		void printMsg(char* msg, int msgLen);
 
 	protected:
 		virtual void* deserializeClientRequest(char* msg, int msgLen);
-		virtual bool processRequest(void*, int command);
+		virtual bool processRequest(void* obj, int command, char* retVal, int* retValLen);
 		virtual void freeDeserializedObject(void* obj);
 
 	public:

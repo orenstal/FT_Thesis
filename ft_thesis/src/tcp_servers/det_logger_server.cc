@@ -55,11 +55,11 @@ private:
 	void updatePacketData(PacketData* packetData, PALSManager* pm);
 	void printState();
 
-	bool processStoreRequest(void* obj);
+	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 
 protected:
 	void* deserializeClientRequest(char* msg, int msgLen);
-	bool processRequest(void*, int command);
+	bool processRequest(void*, int command, char* retVal, int* retValLen);
 	void freeDeserializedObject(void* obj);
 
 public:
@@ -75,7 +75,7 @@ void* DetLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	return (void*)pm;
 }
 
-bool DetLoggerServer::processStoreRequest(void* obj) {
+bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
 	cout << "DetLoggerServer::processStoreRequest" << endl;
 	PALSManager* pm = (PALSManager*)obj;
 	pm->printContent();
@@ -86,14 +86,17 @@ bool DetLoggerServer::processStoreRequest(void* obj) {
 	addPacketId(pm->getPacketId(), packetIds);
 	printState();
 
+	// ack/nack will be sent anyway.
+	*retValLen = 0;
+
 	return true;
 }
 
-bool DetLoggerServer::processRequest(void* obj, int command) {
+bool DetLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "command is: " << command << endl;
 
 	if (command == STORE_COMMAND_TYPE) {
-		return processStoreRequest(obj);
+		return processStoreRequest(obj, retVal, retValLen);
 	}
 
 	return false;

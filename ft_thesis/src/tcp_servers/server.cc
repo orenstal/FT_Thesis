@@ -175,9 +175,11 @@ void Server::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
 
 void Server::handleClientRequestThread(int sockfd) {
 	cout << "about to read message from sockfd: " << sockfd << endl;
-	char* msg = new char[SERVER_BUFFER_SIZE];
+	char* msg = new char[SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 	int msgLen;	// msgLen doesn't include the command chars (as well as the msgLen digits themselves)
 	int command;
+	char* retVal = new char[MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
+	int retValLen = 0;
 
 	readCommonClientRequest(sockfd, msg, &msgLen, &command);
 	cout << "[Server::handleClientRequestThread] msgLen: " << msgLen << ", command: " << command << endl;
@@ -193,9 +195,9 @@ void Server::handleClientRequestThread(int sockfd) {
 
 	// now we have msg and msgLen.
 	void* obj = deserializeClientRequest(msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, msgLen);
-	bool retStatus = processRequest(obj, command);
+	bool retStatus = processRequest(obj, command, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, &retValLen);
 
-	writeResponseToClient(sockfd, retStatus);
+	writeResponseToClient(sockfd, retStatus, retVal, retValLen);
 
 	delete msg;
 	freeDeserializedObject(obj);
@@ -206,11 +208,102 @@ void Server::handleClientRequestThread(int sockfd) {
 
 }
 
-void Server::writeResponseToClient(int sockfd, bool succeed) {
+/*
+ * This function returns a string representation of length numOfDigits for the inserted number. If the number's
+ * length is smaller than numOfDigits, we pad the returned string with 0 at the beginning appropriately.
+ */
+void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
+{
+	sprintf(numAsStr, "%0*d", numOfDigits, number);
+}
+
+bool Server::sendMsg(int sockfd, char* retVal, int length) {
+	printf("in sendMsg.. length: %d, msg:", length);
+	//	cout << "in sendMsg.. length: " << length << ", msg: ";
+
+	// print message content
+	for(int i=0; i< length; i++) {
+		printf("%c", retVal[i]);
+//		cout << serialized[i];
+	}
+
+	printf("\n");
+//	cout << endl;
+
+
+	int totalSentBytes = 0;
+
+	if (length > MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS) {
+		printf("ERROR: can't send message that is too long\n");
+		return false;
+	}
+
+	// Write the message to the server
+	while (totalSentBytes < length) {
+		printf("sending..\n");
+		int ret = send(sockfd, retVal, length - totalSentBytes, 0);
+
+		if (ret == 0) {
+			printf("ERROR: The client is terminated. Stop sending..\n");
+			break;
+		}
+
+		if (ret < 0) {
+			// trying to send one more time after failing the first time
+			ret = send(sockfd, retVal, length - totalSentBytes, 0);
+
+			if (ret == 0) {
+				printf("ERROR: The client is terminated. Stop sending..\n");
+				exit(1);
+			}
+
+			if (ret < 0) {
+				return false;
+			}
+		}
+
+		totalSentBytes += ret;
+		retVal += ret;
+	}
+
+	printf("totalSentBytes: %d\n", totalSentBytes);
+
+	if (totalSentBytes == length) {
+		return true;
+	}
+
+	return false;
+
+}
+
+void Server::writeResponseToClient(int sockfd, bool succeed, char* retVal, int retValLen) {
 	int ret = -1;
+	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
+	intToStringDigits(retValLen, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, numAsStr);
 
-	cout << "send response to client with sockfd: " << sockfd << endl;
+	printf("numAsStr is: %s\n", numAsStr);
+	printf("retValLen is: %d\n", retValLen);
 
+	for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
+		printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
+		retVal[i] = numAsStr[i];
+	}
+
+	if (succeed) {
+		retVal[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX] = '1';
+	} else {
+		retVal[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX] = '0';
+	}
+
+	// retValLen is the length of the returned data
+	// without NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS digits.
+	// Therefore we need to add them to the total length that should be sent back to client.
+	retValLen += NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + NUM_OF_DIGITS_FOR_RET_VAL_STATUS;
+	cout << "sending " << retValLen << " bytes as response to client with sockfd: " << sockfd << endl;
+
+	sendMsg(sockfd, retVal, retValLen);
+
+	/*
 	if (succeed) {
 		ret = send(sockfd, RESPONSE_STATE_SUCCESS, 1, 0);
 
@@ -232,6 +325,7 @@ void Server::writeResponseToClient(int sockfd, bool succeed) {
 	} else {
 		cout << "response (" << succeed << ") was written successfully to client with sockfd: " << sockfd << endl;
 	}
+	*/
 
 }
 
@@ -351,7 +445,7 @@ void* Server::deserializeClientRequest(char* msg, int msgLen) {
 	return NULL;
 }
 
-bool Server::processRequest(void* obj, int command) {
+bool Server::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "Server::processRequest" << endl;
 	return true;
 }

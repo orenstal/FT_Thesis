@@ -56,6 +56,10 @@ void Client::serializeObject(void* obj, char* serialized, int* len) {
 	//	cout << "Client::serializeObject" << endl;
 }
 
+void Client::handleReturnValue(int status, char* retVal, int len, int command) {
+	printf("Client::handleReturnValue\n");
+}
+
 /*
  * This function returns a string representation of length numOfDigits for the inserted number. If the number's
  * length is smaller than numOfDigits, we pad the returned string with 0 at the beginning appropriately.
@@ -158,11 +162,140 @@ bool Client::sendMsg(char* serialized, int length) {
 
 }
 
-bool Client::sendMsgAndWait(char* serialized, int length) {
+void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* status) {
+
+	// receive message in the following format: [7 digits representing the client name's length][client name]
+	int totalReceivedBytes = receiveMsgFromServer(sockfd, 0, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
+	printf("Client::readCommonServerResponse] 1: sockfd: %d, , totalReceivedBytes: %d\n", sockfd, totalReceivedBytes);
+//	cout << "Server::readCommonServerRequest] 1: sockfd: " << sockfd << ", totalReceivedBytes: " << totalReceivedBytes << endl;
+
+	// client socket was closed and removed
+	if (totalReceivedBytes == -1) {
+		*msgLen = -1;
+		return;
+	}
+
+	char *ptr = msg + totalReceivedBytes;
+
+	// convert the received length of the client name to int
+	char len[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + 1];
+	memset(len, '\0', NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + 1);
+	strncpy(len, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
+	*msgLen = checkLength(len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, 0);
+	printf("msgLen is: %s, len: %d\n", *msgLen, len);
+//	cout << "msgLen is: " << *msgLen << ", len: " << len << endl;
+
+	// convert the received command digit to int
+	char receivedStatus[NUM_OF_DIGITS_FOR_RET_VAL_STATUS + 1];
+	memset(receivedStatus, '\0', NUM_OF_DIGITS_FOR_RET_VAL_STATUS + 1);
+	strncpy(receivedStatus, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
+	*status = checkLength(receivedStatus, NUM_OF_DIGITS_FOR_RET_VAL_STATUS, 0);
+	printf("status is: %d, receivedStatus: %s\n", *status, receivedStatus);
+//	cout << "status is: " << *status << ", receivedStatus: " << receivedStatus << endl;
+
+	// receive the content
+	totalReceivedBytes = receiveMsgFromServer(sockfd, totalReceivedBytes, ptr, *msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
+	printf("Client::readCommonServerResponse] 2: totalReceivedBytes: %d\n", totalReceivedBytes);
+//	cout << "Server::readCommonServerRequest] 2: totalReceivedBytes: " << totalReceivedBytes << endl;
+
+	// client socket was closed and removed
+	if (totalReceivedBytes == -1) {
+		return;
+	}
+
+}
+
+/*
+ * This function checks that the inserted num is actually a number, and that is at least of minimalExpectedValue.
+ * length is num size. If num passed these checks - returns it as integer. Otherwise returns -1.
+ */
+int Client::checkLength (char* num, int length, int minimalExpectedValue) {
+	for (int i=0; i<length; i++) {
+		if (isdigit(num[i]) == false) {
+			return -1;
+		}
+	}
+
+	int convertedNum = atoi(num);
+
+	if (convertedNum < minimalExpectedValue) {
+		return -1;
+	}
+
+	return convertedNum;
+}
+
+/*
+ * This function handles the receiving of a message from the client clientName (with socket fd clientSockfd)
+ * of length (maximalReceivedBytes - totalReceivedBytes) from totalReceivedBytes to maximalReceivedBytes.
+ * It returns how many it received in here, and inserts this message to msg.
+ * In case that the client disconnected abruptly - it turns the terminateItself flag to true.
+ */
+int Client::receiveMsgFromServer (int serverSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes) {
+	printf("Client::receiveMsgFromServer] 1: serverSockfd: %d, , totalReceivedBytes: %d\n", serverSockfd, totalReceivedBytes);
+//	cout << "[Server::receiveMsgFromServer] : serverSockfd: " << serverSockfd << ", totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
+	char * ptr = msg;
+
+	while (totalReceivedBytes < maximalReceivedBytes) {
+		printf("totalReceivedBytes: %d, maximalReceivedBytes: %d\n", totalReceivedBytes, maximalReceivedBytes);
+//		cout << "totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
+		int ret = recv(serverSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
+		printf("ret: %d\n", ret);
+//		cout << "ret: " << ret << endl;
+		printf("msg: %s\n", msg);
+//		cout << "msg: " << msg << endl;
+
+		if (ret == 0) {
+			printf("Error: Server is terminated. exit...\n");
+//			cout << "Error: Server is terminated. exit..." << endl;
+			exit(1);
+		}
+
+		if (ret < 0) {
+			printf("trying one more time\n");
+			// trying to receive one more time after failing the first time
+			ret = recv(serverSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
+			printf("ret: %d\n", ret);
+//			cout << "ret: " << ret << endl;
+
+			if (ret <= 0) {
+				printf("Error: Server is terminated. exit...\n");
+				exit(1);
+			}
+		}
+
+		totalReceivedBytes += ret;
+		ptr += ret;
+	}
+
+	return totalReceivedBytes;
+}
+
+
+bool Client::sendMsgAndWait(char* serialized, int length, int command) {
 	sendMsg(serialized, length);
-	char status[1];
+	char* retVal = new char[MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
+	int retValLen = 0;
+	int status = 0;
 
 	printf("wait for receive\n");
+	readCommonServerResponse(sockfd, retVal, &retValLen, &status);
+
+	if (status == 0) {
+		printf("ERROR: got failure status!\n");
+		return false;
+	}
+
+	printf("got success status\n");
+
+	if (retValLen > 0) {
+		printf("received message length > 0. Calling to handleReturnValue\n");
+		handleReturnValue(status, retVal, retValLen, command);
+	}
+
+	return true;
+
+	/*
 	//	cout << "wait for receive" << endl;
 	int ret = recv(sockfd, status, 1, 0);
 
@@ -180,7 +313,10 @@ bool Client::sendMsgAndWait(char* serialized, int length) {
 	printf("got success status\n");
 //	cout << "got success status" << endl;
 	return true;
+	*/
 }
+
+
 
 // todo for click usage.
 CLICK_ENDDECLS

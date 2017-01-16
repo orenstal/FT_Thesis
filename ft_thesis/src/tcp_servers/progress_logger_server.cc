@@ -34,11 +34,11 @@ private:
 	void addPacketId(ProgressData* pd, ServerProgressData* spd);
 	void printState();
 
-	bool processStoreRequest(void* obj);
+	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 
 protected:
 	void* deserializeClientRequest(char* msg, int msgLen);
-	bool processRequest(void*, int command);
+	bool processRequest(void*, int command, char* retVal, int* retValLen);
 	void freeDeserializedObject(void* obj);
 
 public:
@@ -61,7 +61,7 @@ void* ProgressLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	return (void*)pd;
 }
 
-bool ProgressLoggerServer::processStoreRequest(void* obj) {
+bool ProgressLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
 	cout << "ProgressLoggerServer::processStoreRequest" << endl;
 	ProgressData* pd = (ProgressData*)obj;
 
@@ -69,14 +69,17 @@ bool ProgressLoggerServer::processStoreRequest(void* obj) {
 	addPacketId(pd, packetIds);
 	printState();
 
+	// ack/nack will be sent anyway.
+	*retValLen = 0;
+
 	return true;
 }
 
-bool ProgressLoggerServer::processRequest(void* obj, int command) {
+bool ProgressLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "command is: " << command << endl;
 
 	if (command == STORE_COMMAND_TYPE) {
-		return processStoreRequest(obj);
+		return processStoreRequest(obj, retVal, retValLen);
 	}
 
 	return false;

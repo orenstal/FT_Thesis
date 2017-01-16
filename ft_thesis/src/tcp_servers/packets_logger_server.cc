@@ -44,11 +44,11 @@ private:
 	void addPacketVersion(PacketVersionsData* packetVersions, WrappedPacketData* wpd);
 	void printState();
 
-	bool processStoreRequest(void* obj);
+	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 
 protected:
 	void* deserializeClientRequest(char* msg, int msgLen);
-	bool processRequest(void*, int command);
+	bool processRequest(void*, int command, char* retVal, int* retValLen);
 	void freeDeserializedObject(void* obj);
 
 public:
@@ -83,7 +83,7 @@ void* PacketLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	return (void*)wpd;
 }
 
-bool PacketLoggerServer::processStoreRequest(void* obj) {
+bool PacketLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
 	cout << "ProgressLoggerServer::processStoreRequest" << endl;
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
 
@@ -91,14 +91,17 @@ bool PacketLoggerServer::processStoreRequest(void* obj) {
 	addPacketVersion(packetVersions, wpd);
 	printState();
 
+	// ack/nack will be sent anyway.
+	*retValLen = 0;
+
 	return true;
 }
 
-bool PacketLoggerServer::processRequest(void* obj, int command) {
+bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "command is: " << command << endl;
 
 	if (command == STORE_COMMAND_TYPE) {
-		return processStoreRequest(obj);
+		return processStoreRequest(obj, retVal, retValLen);
 	}
 
 	return false;

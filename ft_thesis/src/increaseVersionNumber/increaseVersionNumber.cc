@@ -51,6 +51,7 @@ private:
 
 protected:
 	void serializeObject(void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
 	PacketLoggerIVClient(int port, char* address) : Client(port, address) {
@@ -89,6 +90,15 @@ void PacketLoggerIVClient::serializeObject(void* obj, char* serialized, int* len
 //	cout << "len is: " << *len << endl;
 	click_chatter("len is: %d", *len);
 }
+
+void PacketLoggerIVClient::handleReturnValue(int status, char* retVal, int len, int command) {
+	cout << "PacketLoggerIVClient::handleReturnValue" << endl;
+
+	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+		cout << "nothing to handle." << endl;
+	}
+}
+
 
 int PacketLoggerIVClient::getHeadersLen(Packet *p) {
 	cout << "[increaseVersion] getHeadersLen" << endl;
@@ -253,7 +263,7 @@ void IncreaseVersionNumber::sendToLogger(WrappedPacketData* wpd) {
 
 	client->prepareToSend((void*)wpd, serialized, &len, STORE_COMMAND_TYPE);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;

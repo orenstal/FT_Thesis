@@ -13,6 +13,7 @@ class DetLoggerClient : public Client {
 
 protected:
 	void serializeObject(void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
 	DetLoggerClient(int port, char* address) : Client(port, address) {
@@ -28,6 +29,14 @@ void DetLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
 
 	cout << "start serializing det_logger client" << endl;
 	PALSManager::serialize(pm, serialized, len);
+}
+
+void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+	cout << "DetLoggerClient::handleReturnValue" << endl;
+
+	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+		cout << "nothing to handle." << endl;
+	}
 }
 
 PALSManager* prepareTest1() {
@@ -92,7 +101,7 @@ void runTestAndCompare(DetLoggerClient *client) {
 	PALSManager* pm1 = new PALSManager(1, 444L);
 	PALSManager::deserialize(serialized+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, pm1);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -134,7 +143,7 @@ void runTest(DetLoggerClient *client, PALSManager* pm) {
 
 	client->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;

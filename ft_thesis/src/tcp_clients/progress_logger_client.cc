@@ -22,6 +22,7 @@ class ProgressLoggerClient : public Client {
 
 protected:
 	void serializeObject(void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
 	ProgressLoggerClient(int port, char* address) : Client(port, address) {
@@ -44,6 +45,14 @@ void ProgressLoggerClient::serializeObject(void* obj, char* serialized, int* len
 	*len = sizeof(uint16_t) + sizeof(uint64_t);
 
 	cout << "len is: " << *len << endl;
+}
+
+void ProgressLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+	cout << "ProgressLoggerClient::handleReturnValue" << endl;
+
+	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+		cout << "nothing to handle." << endl;
+	}
 }
 
 
@@ -81,8 +90,7 @@ void runTest(ProgressLoggerClient *client, ProgressData* pd) {
 	int len;
 
 	client->prepareToSend((void*)pd, serialized, &len, STORE_COMMAND_TYPE);
-
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;

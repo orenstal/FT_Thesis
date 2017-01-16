@@ -62,6 +62,7 @@ class DetLoggerClient : public Client {
 
 protected:
 	void serializeObject(void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
 	DetLoggerClient(int port, char* address) : Client(port, address) {
@@ -77,6 +78,13 @@ void DetLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
 	PALSManager::serialize(pm, serialized, len);
 }
 
+void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+	cout << "DetLoggerClient::handleReturnValue" << endl;
+
+	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+		cout << "nothing to handle." << endl;
+	}
+}
 
 
 
@@ -187,7 +195,7 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 
 	detLoggerClient->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
-	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len);
+	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;

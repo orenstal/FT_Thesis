@@ -62,6 +62,7 @@ class PacketLoggerClient : public Client {
 
 protected:
 	void serializeObject(void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
 	PacketLoggerClient(int port, char* address) : Client(port, address) {
@@ -97,6 +98,14 @@ void PacketLoggerClient::serializeObject(void* obj, char* serialized, int* len) 
 
 //	cout << "len is: " << *len << endl;
 	click_chatter("len is: %d", *len);
+}
+
+void PacketLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+	cout << "PacketLoggerClient::handleReturnValue" << endl;
+
+	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+		cout << "nothing to handle." << endl;
+	}
 }
 
 
@@ -400,7 +409,7 @@ int PacketIdEncap::getPacketLen(Packet *p) {
 	return packetLen;
 }
 
-WrappedPacketData* PacketIdEncap::fillWPD(Packet *p) {
+WrappedPacketData* PacketIdEncap::createWPD(Packet *p) {
 	cout << "fill wrapped packet data" << endl;
 
 	int len;
@@ -455,8 +464,7 @@ void PacketIdEncap::sendToLogger(WrappedPacketData* wpd) {
 	int len;
 
 	client->prepareToSend((void*)wpd, serialized, &len, STORE_COMMAND_TYPE);
-
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -493,7 +501,7 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 
 	if (_isMasterMode) {
 		cout << "start running test..." << endl;
-		WrappedPacketData* wpd = fillWPD(q);	//prepareTest1();
+		WrappedPacketData* wpd = createWPD(q);	//prepareTest1();
 		sendToLogger(wpd);
 
 		if (wpd != NULL) {

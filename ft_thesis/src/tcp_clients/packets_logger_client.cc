@@ -21,6 +21,7 @@ class PacketLoggerClient : public Client {
 
 protected:
 	void serializeObject(void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
 	PacketLoggerClient(int port, char* address) : Client(port, address) {
@@ -53,6 +54,14 @@ void PacketLoggerClient::serializeObject(void* obj, char* serialized, int* len) 
 	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
 
 	cout << "len is: " << *len << endl;
+}
+
+void PacketLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+	cout << "PacketLoggerClient::handleReturnValue" << endl;
+
+	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+		cout << "nothing to handle." << endl;
+	}
 }
 
 
@@ -142,8 +151,7 @@ void runTest(PacketLoggerClient *client, WrappedPacketData* wpd) {
 	int len;
 
 	client->prepareToSend((void*)wpd, serialized, &len, STORE_COMMAND_TYPE);
-
-	bool isSucceed = client->sendMsgAndWait(serialized, len);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
