@@ -13,6 +13,8 @@
 #define PORT 9095	// port to listening on
 #define GPAL_VAL_SIZE 50
 
+#define STORE_COMMAND_TYPE 0
+
 using namespace std;
 
 
@@ -31,13 +33,16 @@ typedef struct PacketData {
 
 typedef map<uint16_t, ServerProgressData* >::iterator SPDIterType;
 
-typedef map<uint16_t, map<uint64_t, PacketData*> >::iterator MbDataIterType;
+typedef map<uint64_t, PacketData*> mbDataMap;
+typedef map<uint16_t, mbDataMap> detDataMap;
+
+typedef detDataMap::iterator MbDataIterType;
 typedef map<uint64_t, PacketData*>::iterator PacketDataIterType;
 
 class DetLoggerServer : public Server {
 
 private:
-	map<uint16_t, map<uint64_t, PacketData*> > detData;
+	detDataMap detData;
 	map<uint16_t, ServerProgressData* > progressData;
 
 	// progress data
@@ -50,9 +55,11 @@ private:
 	void updatePacketData(PacketData* packetData, PALSManager* pm);
 	void printState();
 
+	bool processStoreRequest(void* obj);
+
 protected:
 	void* deserializeClientRequest(char* msg, int msgLen);
-	bool processRequest(void*);
+	bool processRequest(void*, int command);
 	void freeDeserializedObject(void* obj);
 
 public:
@@ -65,15 +72,13 @@ void* DetLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	cout << "DetLoggerServer::deserializeClientRequest" << endl;
 	PALSManager* pm = new PALSManager();
 	PALSManager::deserialize(msg, pm);
-
 	return (void*)pm;
 }
 
-bool DetLoggerServer::processRequest(void* obj) {
-	cout << "DetLoggerServer::processRequest" << endl;
+bool DetLoggerServer::processStoreRequest(void* obj) {
+	cout << "DetLoggerServer::processStoreRequest" << endl;
 	PALSManager* pm = (PALSManager*)obj;
 	pm->printContent();
-
 	PacketData* packetData = getPacketData(pm);
 	updatePacketData(packetData, pm);
 
@@ -82,6 +87,16 @@ bool DetLoggerServer::processRequest(void* obj) {
 	printState();
 
 	return true;
+}
+
+bool DetLoggerServer::processRequest(void* obj, int command) {
+	cout << "command is: " << command << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		return processStoreRequest(obj);
+	}
+
+	return false;
 }
 
 void DetLoggerServer::updatePacketData(PacketData* packetData, PALSManager* pm) {
@@ -114,22 +129,22 @@ void DetLoggerServer::updatePacketData(PacketData* packetData, PALSManager* pm) 
 PacketData* DetLoggerServer::getPacketData(PALSManager* pm) {
 	PacketData* packetData;
 
-	cout << "detData.count(" << pm->getMBId() << "): " << detData.count(pm->getMBId()) << endl;
-	if (!detData.count(pm->getMBId())) {
+	if (detData.find(pm->getMBId()) == detData.end()) {
+		cout << "creating a new packetData for new mb: " << pm->getMBId() << endl;
 		packetData = new PacketData();
-		map<uint64_t, PacketData*> mbData;
-		mbData[pm->getPacketId()] = packetData;
-
-		detData[pm->getMBId()] = mbData;
+		mbDataMap mbData;
+		mbData.insert(make_pair(pm->getPacketId(), packetData));
+		detData.insert(make_pair(pm->getMBId(), mbData));
 	} else {
+		cout << "packetData of mb: " << pm->getMBId() << " is already exist." << endl;
 
-		map<uint64_t, PacketData*> mbData = detData[pm->getMBId()];
-
-		if (!mbData.count(pm->getPacketId())) {
+		if (detData[pm->getMBId()].find(pm->getPacketId()) == detData[pm->getMBId()].end()) {
+			cout << "creating a new item for packet id: " << pm->getPacketId() << endl;
 			packetData = new PacketData();
-			mbData[pm->getPacketId()] = packetData;
+			detData[pm->getMBId()].insert(make_pair(pm->getPacketId(), packetData));
 		} else {
-			packetData = mbData[pm->getPacketId()];
+			cout << "updating item for existing packet id: " << pm->getPacketId() << endl;
+			packetData = detData[pm->getMBId()][pm->getPacketId()];
 		}
 	}
 
@@ -146,10 +161,9 @@ void DetLoggerServer::addPacketId(uint64_t pid, ServerProgressData* spd) {
 ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(int mbId) {
 	ServerProgressData* spd;
 
-	cout << "progressData.count(" << mbId << "): " << progressData.count(mbId) << endl;
-	if (!progressData.count(mbId)) {
+	if (progressData.find(mbId) == progressData.end()) {
 		spd = new ServerProgressData();
-		progressData[mbId] = spd;
+		progressData.insert(make_pair(mbId, spd));
 	} else {
 		spd = progressData[mbId];
 	}
@@ -160,11 +174,11 @@ ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(int mbId) {
 
 
 void DetLoggerServer::printState() {
+	cout << "-------------------------------------" << endl;
 	for (MbDataIterType mbIter = detData.begin(); mbIter != detData.end(); mbIter++) {
 		uint16_t mbId = mbIter->first;
-		map<uint64_t, PacketData*> mbData = mbIter->second;
 
-		for (PacketDataIterType pdIter = mbData.begin(); pdIter != mbData.end(); pdIter++) {
+		for (PacketDataIterType pdIter = mbIter->second.begin(); pdIter != mbIter->second.end(); pdIter++) {
 			cout << "mbId: " << mbId << ", packetId: " << pdIter->first << ":" << endl;
 			PacketData* pd = pdIter->second;
 

@@ -51,6 +51,7 @@
 
 #include "../common/pal_api/pals_manager.hh"
 
+#define STORE_COMMAND_TYPE 0
 
 #include <iostream>
 using namespace std;
@@ -184,7 +185,7 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	detLoggerClient->prepareToSend((void*)pm, serialized, &len);
+	detLoggerClient->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
 	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len);
 

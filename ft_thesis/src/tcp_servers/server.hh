@@ -21,7 +21,8 @@
 
 #define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
 #define NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX 7
-#define SERVER_BUFFER_SIZE SERVER_BUFFER_SIZE_WITHOUT_PREFIX+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX
+#define NUM_OF_DIGITS_FOR_COMMAND_PREFIX 1
+#define SERVER_BUFFER_SIZE SERVER_BUFFER_SIZE_WITHOUT_PREFIX+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX
 #define RESPONSE_STATE_SUCCESS "1"
 #define RESPONSE_STATE_FAILURE "0"
 using namespace std;
@@ -61,7 +62,7 @@ class Server {
 			return NULL;
 		}
 
-		void readCommonClientRequest(int sockfd, char* msg, int* msgLen);
+		void readCommonClientRequest(int sockfd, char* msg, int* msgLen, int* command);
 		int receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes);
 		void writeResponseToClient(int sockfd, bool succeed);
 		int checkLength (char* num, int length, int minimalExpectedValue);
@@ -69,7 +70,7 @@ class Server {
 
 	protected:
 		virtual void* deserializeClientRequest(char* msg, int msgLen);
-		virtual bool processRequest(void*);
+		virtual bool processRequest(void*, int command);
 		virtual void freeDeserializedObject(void* obj);
 
 	public:

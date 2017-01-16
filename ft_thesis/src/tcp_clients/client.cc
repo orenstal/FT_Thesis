@@ -65,10 +65,10 @@ void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 	sprintf(numAsStr, "%0*d", numOfDigits, number);
 }
 
-void Client::prepareToSend(void* obj, char* serialized, int* len) {
+void Client::prepareToSend(void* obj, char* serialized, int* len, int command) {
 	printf("Client::prepareToSend\n");
 	// we leave NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX (7) digits for the serialization length
-	serializeObject(obj, serialized + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, len);
+	serializeObject(obj, serialized + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, len);
 	printf("Client::done serializing\n");
 
 	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
@@ -83,8 +83,18 @@ void Client::prepareToSend(void* obj, char* serialized, int* len) {
 		serialized[i] = numAsStr[i];
 	}
 
-	*len += NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX;
+	char commandAsStr[NUM_OF_DIGITS_FOR_COMMAND_PREFIX+1];
+	intToStringDigits(command, NUM_OF_DIGITS_FOR_COMMAND_PREFIX, commandAsStr);
+	printf("commandAsStr is: %s\n", commandAsStr);
+
+	for (int i=0; i<NUM_OF_DIGITS_FOR_COMMAND_PREFIX; i++) {
+		printf("commandAsStr[%d]: %c\n", i, commandAsStr[i]);
+		serialized[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + i] = commandAsStr[i];
+	}
+
+	*len += NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX;
 	printf("len is: %d\n", *len);
+	printf("serialized is: %s\n", serialized);
 	printf("[Client::prepareToSend] Done\n");
 	fflush(stdout);
 }

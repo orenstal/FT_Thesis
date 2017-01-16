@@ -4,6 +4,9 @@
 #include <iostream>
 #include "../common/pal_api/pals_manager.hh"
 #include "client.hh"
+
+#define STORE_COMMAND_TYPE 0
+
 using namespace std;
 
 class DetLoggerClient : public Client {
@@ -84,10 +87,10 @@ void runTestAndCompare(DetLoggerClient *client) {
 
 	PALSManager* pm = prepareTest1();
 
-	client->prepareToSend((void*)pm, serialized, &len);
+	client->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
 	PALSManager* pm1 = new PALSManager(1, 444L);
-	PALSManager::deserialize(serialized+7, pm1);
+	PALSManager::deserialize(serialized+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, pm1);
 
 	bool isSucceed = client->sendMsgAndWait(serialized, len);
 
@@ -129,7 +132,7 @@ void runTest(DetLoggerClient *client, PALSManager* pm) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	client->prepareToSend((void*)pm, serialized, &len);
+	client->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
 	bool isSucceed = client->sendMsgAndWait(serialized, len);
 

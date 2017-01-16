@@ -11,6 +11,9 @@
 #include <iostream>
 #include "client.hh"
 #include "../common/wrappedPacketData/wrapped_packet_data.hh"
+
+#define STORE_COMMAND_TYPE 0
+
 using namespace std;
 
 
@@ -138,7 +141,7 @@ void runTest(PacketLoggerClient *client, WrappedPacketData* wpd) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	client->prepareToSend((void*)wpd, serialized, &len);
+	client->prepareToSend((void*)wpd, serialized, &len, STORE_COMMAND_TYPE);
 
 	bool isSucceed = client->sendMsgAndWait(serialized, len);
 

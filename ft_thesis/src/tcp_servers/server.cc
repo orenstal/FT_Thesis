@@ -176,9 +176,11 @@ void Server::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
 void Server::handleClientRequestThread(int sockfd) {
 	cout << "about to read message from sockfd: " << sockfd << endl;
 	char* msg = new char[SERVER_BUFFER_SIZE];
-	int msgLen;
+	int msgLen;	// msgLen doesn't include the command chars (as well as the msgLen digits themselves)
+	int command;
 
-	readCommonClientRequest(sockfd, msg, &msgLen);
+	readCommonClientRequest(sockfd, msg, &msgLen, &command);
+	cout << "[Server::handleClientRequestThread] msgLen: " << msgLen << ", command: " << command << endl;
 
 	if (msgLen == -1) {
 		delete msg;
@@ -190,8 +192,8 @@ void Server::handleClientRequestThread(int sockfd) {
 	printMsg(msg, msgLen);
 
 	// now we have msg and msgLen.
-	void* obj = deserializeClientRequest(msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, msgLen);
-	bool retStatus = processRequest(obj);
+	void* obj = deserializeClientRequest(msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, msgLen);
+	bool retStatus = processRequest(obj, command);
 
 	writeResponseToClient(sockfd, retStatus);
 
@@ -234,7 +236,7 @@ void Server::writeResponseToClient(int sockfd, bool succeed) {
 }
 
 void Server::printMsg(char* msg, int msgLen) {
-	cout << "message full len is: " << msgLen + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX << endl;
+	cout << "message full len is: " << msgLen + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + NUM_OF_DIGITS_FOR_COMMAND_PREFIX << endl;
 	cout << "message len is: " << msgLen << endl;
 	cout << "message is: " << endl;
 	for (int i=0; i<msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
@@ -244,10 +246,10 @@ void Server::printMsg(char* msg, int msgLen) {
 }
 
 
-void Server::readCommonClientRequest(int sockfd, char* msg, int* msgLen) {
+void Server::readCommonClientRequest(int sockfd, char* msg, int* msgLen, int* command) {
 
 	// receive message in the following format: [7 digits representing the client name's length][client name]
-	int totalReceivedBytes = receiveMsgFromClient(sockfd, 0, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
+	int totalReceivedBytes = receiveMsgFromClient(sockfd, 0, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX);
 	cout << "Server::readCommonClientRequest] 1: sockfd: " << sockfd << ", totalReceivedBytes: " << totalReceivedBytes << endl;
 
 	// client socket was closed and removed
@@ -263,10 +265,17 @@ void Server::readCommonClientRequest(int sockfd, char* msg, int* msgLen) {
 	memset(len, '\0', NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + 1);
 	strncpy(len, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 	*msgLen = checkLength(len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, 1);
-	cout << "msgLen is: " << *msgLen << endl;
+	cout << "msgLen is: " << *msgLen << ", len: " << len << endl;
+
+	// convert the received command digit to int
+	char receivedCommand[NUM_OF_DIGITS_FOR_COMMAND_PREFIX + 1];
+	memset(receivedCommand, '\0', NUM_OF_DIGITS_FOR_COMMAND_PREFIX + 1);
+	strncpy(receivedCommand, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, NUM_OF_DIGITS_FOR_COMMAND_PREFIX);
+	*command = checkLength(receivedCommand, NUM_OF_DIGITS_FOR_COMMAND_PREFIX, 0);
+	cout << "command is: " << *command << ", receivedCommand: " << receivedCommand << endl;
 
 	// receive the content
-	totalReceivedBytes = receiveMsgFromClient(sockfd, totalReceivedBytes, ptr, *msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
+	totalReceivedBytes = receiveMsgFromClient(sockfd, totalReceivedBytes, ptr, *msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX);
 	cout << "Server::readCommonClientRequest] 2: totalReceivedBytes: " << totalReceivedBytes << endl;
 
 	// client socket was closed and removed
@@ -311,6 +320,7 @@ int Server::receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char
 		cout << "totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
 		int ret = recv(clientSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
 		cout << "ret: " << ret << endl;
+		cout << "msg: " << msg << endl;
 
 		if (ret == 0) {
 			removeClient(clientSockfd, ret);
@@ -341,7 +351,7 @@ void* Server::deserializeClientRequest(char* msg, int msgLen) {
 	return NULL;
 }
 
-bool Server::processRequest(void* obj) {
+bool Server::processRequest(void* obj, int command) {
 	cout << "Server::processRequest" << endl;
 	return true;
 }

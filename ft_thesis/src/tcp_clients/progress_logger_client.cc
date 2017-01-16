@@ -12,6 +12,9 @@
 #include <iostream>
 #include "client.hh"
 #include "../common/progressData/progress_data.hh"
+
+#define STORE_COMMAND_TYPE 0
+
 using namespace std;
 
 
@@ -77,7 +80,7 @@ void runTest(ProgressLoggerClient *client, ProgressData* pd) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	client->prepareToSend((void*)pd, serialized, &len);
+	client->prepareToSend((void*)pd, serialized, &len, STORE_COMMAND_TYPE);
 
 	bool isSucceed = client->sendMsgAndWait(serialized, len);
 

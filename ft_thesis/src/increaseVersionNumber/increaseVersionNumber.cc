@@ -36,6 +36,8 @@
 #include "../common/wrappedPacketData/wrapped_packet_data.hh"
 //#include "../common/pal_api/pals_manager.hh"
 
+#define STORE_COMMAND_TYPE 0
+
 #include <iostream>
 using namespace std;
 CLICK_DECLS
@@ -249,7 +251,7 @@ void IncreaseVersionNumber::sendToLogger(WrappedPacketData* wpd) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	client->prepareToSend((void*)wpd, serialized, &len);
+	client->prepareToSend((void*)wpd, serialized, &len, STORE_COMMAND_TYPE);
 
 	bool isSucceed = client->sendMsgAndWait(serialized, len);
 

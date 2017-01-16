@@ -12,6 +12,7 @@
 #include <vector>
 
 #define PORT 9096	// port to listening on
+#define STORE_COMMAND_TYPE 0
 
 using namespace std;
 
@@ -33,9 +34,11 @@ private:
 	void addPacketId(ProgressData* pd, ServerProgressData* spd);
 	void printState();
 
+	bool processStoreRequest(void* obj);
+
 protected:
 	void* deserializeClientRequest(char* msg, int msgLen);
-	bool processRequest(void*);
+	bool processRequest(void*, int command);
 	void freeDeserializedObject(void* obj);
 
 public:
@@ -58,8 +61,8 @@ void* ProgressLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	return (void*)pd;
 }
 
-bool ProgressLoggerServer::processRequest(void* obj) {
-	cout << "ProgressLoggerServer::processRequest" << endl;
+bool ProgressLoggerServer::processStoreRequest(void* obj) {
+	cout << "ProgressLoggerServer::processStoreRequest" << endl;
 	ProgressData* pd = (ProgressData*)obj;
 
 	ServerProgressData* packetIds = getOrCreateServerProgressData(pd->mbId);
@@ -67,6 +70,16 @@ bool ProgressLoggerServer::processRequest(void* obj) {
 	printState();
 
 	return true;
+}
+
+bool ProgressLoggerServer::processRequest(void* obj, int command) {
+	cout << "command is: " << command << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		return processStoreRequest(obj);
+	}
+
+	return false;
 }
 
 
