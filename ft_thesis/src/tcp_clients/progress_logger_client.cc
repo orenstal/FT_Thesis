@@ -20,8 +20,11 @@ using namespace std;
 
 class ProgressLoggerClient : public Client {
 
+private:
+	void serializeProgressDataObject(int command, void* obj, char* serialized, int* len);
+
 protected:
-	void serializeObject(void* obj, char* serialized, int* len);
+	void serializeObject(int command, void* obj, char* serialized, int* len);
 	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
@@ -30,8 +33,8 @@ public:
 	}
  };
 
-void ProgressLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
-	cout << "ProgressLoggerClient::serializeObject" << endl;
+void ProgressLoggerClient::serializeProgressDataObject(int command, void* obj, char* serialized, int* len) {
+	cout << "ProgressLoggerClient::serializeProgressDataObject" << endl;
 	ProgressData* pd = (ProgressData*)obj;
 
 	uint16_t *q = (uint16_t*)serialized;
@@ -45,6 +48,14 @@ void ProgressLoggerClient::serializeObject(void* obj, char* serialized, int* len
 	*len = sizeof(uint16_t) + sizeof(uint64_t);
 
 	cout << "len is: " << *len << endl;
+}
+
+void ProgressLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
+	cout << "ProgressLoggerClient::serializeObject" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		serializeProgressDataObject(command, obj, serialized, len);
+	}
 }
 
 void ProgressLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {

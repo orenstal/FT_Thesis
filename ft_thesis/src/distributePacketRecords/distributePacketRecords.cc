@@ -60,8 +60,11 @@ CLICK_DECLS
 
 class DetLoggerClient : public Client {
 
+private:
+	void serializePalsManagerObject(int command, void* obj, char* serialized, int* len);
+
 protected:
-	void serializeObject(void* obj, char* serialized, int* len);
+	void serializeObject(int command, void* obj, char* serialized, int* len);
 	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
@@ -70,12 +73,20 @@ public:
 	}
 };
 
-void DetLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
-	cout << "DetLoggerClient::serializeObject" << endl;
+void DetLoggerClient::serializePalsManagerObject(int command, void* obj, char* serialized, int* len) {
+	cout << "DetLoggerClient::serializePalsManagerObject" << endl;
 	PALSManager* pm = (PALSManager*)obj;
 
 	cout << "start serializing det_logger client" << endl;
 	PALSManager::serialize(pm, serialized, len);
+}
+
+void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
+	cout << "DetLoggerClient::serializeObject" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		serializePalsManagerObject(command, obj, serialized, len);
+	}
 }
 
 void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {

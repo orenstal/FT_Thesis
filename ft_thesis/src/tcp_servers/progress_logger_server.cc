@@ -34,10 +34,11 @@ private:
 	void addPacketId(ProgressData* pd, ServerProgressData* spd);
 	void printState();
 
+	void* deserializeClientStoreRequest(int command, char* msg, int msgLen);
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 
 protected:
-	void* deserializeClientRequest(char* msg, int msgLen);
+	void* deserializeClientRequest(int command, char* msg, int msgLen);
 	bool processRequest(void*, int command, char* retVal, int* retValLen);
 	void freeDeserializedObject(void* obj);
 
@@ -47,8 +48,8 @@ public:
 	}
  };
 
-void* ProgressLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
-	cout << "ProgressLoggerServer::deserializeClientRequest" << endl;
+void* ProgressLoggerServer::deserializeClientStoreRequest(int command, char* msg, int msgLen) {
+	cout << "ProgressLoggerServer::deserializeClientStoreRequest" << endl;
 
 	ProgressData* pd = new ProgressData;
 	uint16_t *q = (uint16_t*)msg;
@@ -59,6 +60,16 @@ void* ProgressLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	pd->packetId = *p;
 
 	return (void*)pd;
+}
+
+void* ProgressLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
+	cout << "ProgressLoggerServer::deserializeClientRequest" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		return deserializeClientStoreRequest(command, msg, msgLen);
+	}
+
+	return NULL;
 }
 
 bool ProgressLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {

@@ -9,9 +9,11 @@
 #include "../common/wrappedPacketData/wrapped_packet_data.hh"
 #include <map>
 #include <vector>
+#include <algorithm>
 
 #define PORT 9097	// port to listening on
 #define STORE_COMMAND_TYPE 0
+#define GET_PACKET_BY_PACKID_COMMAND_TYPE 1
 
 
 using namespace std;
@@ -23,13 +25,15 @@ typedef struct SinglePacketVersionData {
     char* data;
 } SinglePacketData;
 
+// comparator for sorting the packet versions according to version field (from 1 to 30)
+bool spvdComparator(SinglePacketVersionData* a, SinglePacketVersionData* b) {
+	return (a->version < b->version);
+}
 
 typedef struct PacketVersionsData {
     vector<SinglePacketVersionData*> packet_versions;
     uint8_t index;
 } PacketVersionsData;
-
-
 
 typedef map<uint64_t, PacketVersionsData* >::iterator PVDIterType;
 
@@ -44,10 +48,14 @@ private:
 	void addPacketVersion(PacketVersionsData* packetVersions, WrappedPacketData* wpd);
 	void printState();
 
+	void* deserializeClientStoreRequest(int command, char* msg, int msgLen);
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
+	bool processGetPacketByIdRequest(void* obj, char* retVal, int* retValLen);
+
+	bool getPacket(uint64_t packId, char* retVal, int* retValLen);
 
 protected:
-	void* deserializeClientRequest(char* msg, int msgLen);
+	void* deserializeClientRequest(int command, char* msg, int msgLen);
 	bool processRequest(void*, int command, char* retVal, int* retValLen);
 	void freeDeserializedObject(void* obj);
 
@@ -57,8 +65,8 @@ public:
 	}
  };
 
-void* PacketLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
-	cout << "PacketLoggerServer::deserializeClientRequest" << endl;
+void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, int msgLen) {
+	cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl;
 
 	WrappedPacketData* wpd = new WrappedPacketData;
 	uint64_t *q = (uint64_t*)msg;
@@ -83,6 +91,18 @@ void* PacketLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
 	return (void*)wpd;
 }
 
+void* PacketLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
+	cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		return deserializeClientStoreRequest(command, msg, msgLen);
+	} else if (command == GET_PACKET_BY_PACKID_COMMAND_TYPE) {
+		return (void*)msg;
+	}
+
+	return NULL;
+}
+
 bool PacketLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
 	cout << "ProgressLoggerServer::processStoreRequest" << endl;
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
@@ -97,14 +117,79 @@ bool PacketLoggerServer::processStoreRequest(void* obj, char* retVal, int* retVa
 	return true;
 }
 
+bool PacketLoggerServer::processGetPacketByIdRequest(void* obj, char* retVal, int* retValLen) {
+	cout << "PacketLoggerServer::processGetPacketByIdRequest" << endl;
+	uint64_t packId = 0;
+
+	// extract packId from client request
+	uint64_t *p = (uint64_t*)obj;
+	packId = *p;
+
+	cout << "packId: " << packId << endl;
+	getPacket(packId, retVal, retValLen);
+
+	cout << "packet is: " << retVal << endl;
+
+	return true;
+}
+
 bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "command is: " << command << endl;
 
 	if (command == STORE_COMMAND_TYPE) {
 		return processStoreRequest(obj, retVal, retValLen);
+	} else if (command == GET_PACKET_BY_PACKID_COMMAND_TYPE) {
+		return processGetPacketByIdRequest(obj, retVal, retValLen);
 	}
 
 	return false;
+}
+
+bool PacketLoggerServer::getPacket(uint64_t packId, char* retVal, int* retValLen) {
+	cout << "PacketLoggerServer::getPacket" << endl;
+	cout << "retVal location: " << &(*retVal) << endl;
+	PacketVersionsData* packetVersions = NULL;
+	*retValLen = 0;
+
+	uint64_t packetIdBase = packId >> 5;
+	uint8_t packetVersion = packId & 31;
+
+	cout << "packet id base is: " << packetIdBase << ", packet version is: " << unsigned(packetVersion) << endl;
+
+	if (packetsVersions.find(packetIdBase) != packetsVersions.end()) {
+		cout << "packIdBase " << packetIdBase << " exist in packetsVersions" << endl;
+		packetVersions = packetsVersions[packetIdBase];
+	}
+
+	if (packetVersions == NULL) {
+		cout << "WARNING: received packet id doesn't exist!!" << endl;
+		return false;
+	}
+
+	uint8_t packetVersionsLen = packetVersions->index;
+	cout << "packetVersionsLen: " << unsigned(packetVersionsLen) << endl;
+
+	if (packetVersion < packetVersionsLen) {
+		packetVersionsLen = packetVersion;
+	}
+
+	cout << "~~ packetVersionsLen: " << unsigned(packetVersionsLen) << endl;
+
+
+	vector<SinglePacketVersionData*> pvd = packetVersions->packet_versions;
+
+	// sorting the vector according to the version number
+	// todo basically this step is not necessary because the version order is kept.
+	sort(pvd.begin(), pvd.end(), spvdComparator);
+
+	for (uint8_t i=0; i<packetVersionsLen; i++) {
+		SinglePacketVersionData* spvd = pvd[i];
+		cout << "i: " << unsigned(i) << ", version: " << unsigned(spvd->version) << ". About to copy data of size: " << spvd->size << ", to offset: " << retVal+(int)spvd->offset <<  endl;
+		memcpy(retVal+(int)spvd->offset, spvd->data, (int)spvd->size);
+		*retValLen = max(*retValLen, (int)spvd->size);
+	}
+
+	return true;
 }
 
 

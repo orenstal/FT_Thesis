@@ -51,7 +51,7 @@ void Client::connectToServer() {
 	printf("Connected\n");
 }
 
-void Client::serializeObject(void* obj, char* serialized, int* len) {
+void Client::serializeObject(int command, void* obj, char* serialized, int* len) {
 	printf("Client::serializeObject\n");
 	//	cout << "Client::serializeObject" << endl;
 }
@@ -72,7 +72,7 @@ void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 void Client::prepareToSend(void* obj, char* serialized, int* len, int command) {
 	printf("Client::prepareToSend\n");
 	// we leave NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX (7) digits for the serialization length
-	serializeObject(obj, serialized + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, len);
+	serializeObject(command, obj, serialized + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, len);
 	printf("Client::done serializing\n");
 
 	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
@@ -167,6 +167,7 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
 	// receive message in the following format: [7 digits representing the client name's length][client name]
 	int totalReceivedBytes = receiveMsgFromServer(sockfd, 0, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
 	printf("Client::readCommonServerResponse] 1: sockfd: %d, , totalReceivedBytes: %d\n", sockfd, totalReceivedBytes);
+	printf("total received bytes is %d\n", totalReceivedBytes);
 //	cout << "Server::readCommonServerRequest] 1: sockfd: " << sockfd << ", totalReceivedBytes: " << totalReceivedBytes << endl;
 
 	// client socket was closed and removed
@@ -182,7 +183,7 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
 	memset(len, '\0', NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + 1);
 	strncpy(len, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 	*msgLen = checkLength(len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, 0);
-	printf("msgLen is: %s, len: %d\n", *msgLen, len);
+	printf("msgLen is: %d, len: %s\n", *msgLen, len);
 //	cout << "msgLen is: " << *msgLen << ", len: " << len << endl;
 
 	// convert the received command digit to int
@@ -210,7 +211,11 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
  * length is num size. If num passed these checks - returns it as integer. Otherwise returns -1.
  */
 int Client::checkLength (char* num, int length, int minimalExpectedValue) {
+	printf("Client::checkLength\n");
+	fflush(stdout);
+
 	for (int i=0; i<length; i++) {
+		fflush(stdout);
 		if (isdigit(num[i]) == false) {
 			return -1;
 		}
@@ -290,7 +295,7 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command) {
 
 	if (retValLen > 0) {
 		printf("received message length > 0. Calling to handleReturnValue\n");
-		handleReturnValue(status, retVal, retValLen, command);
+		handleReturnValue(status, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, retValLen, command);
 	}
 
 	return true;

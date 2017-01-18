@@ -40,7 +40,7 @@ protected:
 	struct sockaddr_in sock_addr_server;
 	int sockfd;
 
-	virtual void serializeObject(void* obj, char* serialized, int* len);
+	virtual void serializeObject(int command, void* obj, char* serialized, int* len);
 	virtual void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:

@@ -60,8 +60,11 @@ CLICK_DECLS
 
 class PacketLoggerClient : public Client {
 
+private:
+	void serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len);
+
 protected:
-	void serializeObject(void* obj, char* serialized, int* len);
+	void serializeObject(int command, void* obj, char* serialized, int* len);
 	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
@@ -71,9 +74,8 @@ public:
 	}
  };
 
-void PacketLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
-	click_chatter("PacketLoggerClient::serializeObject");
-//	cout << "PacketLoggerClient::serializeObject" << endl;
+void PacketLoggerClient::serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len) {
+	cout << "PacketLoggerClient::serializeWrappedPacketDataObject" << endl;
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
 	uint16_t size = wpd->size;
 
@@ -96,8 +98,15 @@ void PacketLoggerClient::serializeObject(void* obj, char* serialized, int* len) 
 
 	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
 
-//	cout << "len is: " << *len << endl;
-	click_chatter("len is: %d", *len);
+	cout << "len is: " << *len << endl;
+}
+
+void PacketLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
+	cout << "PacketLoggerClient::serializeObject" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		serializeWrappedPacketDataObject(command, obj, serialized, len);
+	}
 }
 
 void PacketLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {

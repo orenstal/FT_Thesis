@@ -72,7 +72,7 @@ class Server {
 		void printMsg(char* msg, int msgLen);
 
 	protected:
-		virtual void* deserializeClientRequest(char* msg, int msgLen);
+		virtual void* deserializeClientRequest(int command, char* msg, int msgLen);
 		virtual bool processRequest(void* obj, int command, char* retVal, int* retValLen);
 		virtual void freeDeserializedObject(void* obj);
 

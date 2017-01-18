@@ -194,7 +194,7 @@ void Server::handleClientRequestThread(int sockfd) {
 	printMsg(msg, msgLen);
 
 	// now we have msg and msgLen.
-	void* obj = deserializeClientRequest(msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, msgLen);
+	void* obj = deserializeClientRequest(command, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, msgLen);
 	bool retStatus = processRequest(obj, command, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, &retValLen);
 
 	writeResponseToClient(sockfd, retStatus, retVal, retValLen);
@@ -222,10 +222,10 @@ bool Server::sendMsg(int sockfd, char* retVal, int length) {
 	//	cout << "in sendMsg.. length: " << length << ", msg: ";
 
 	// print message content
-	for(int i=0; i< length; i++) {
-		printf("%c", retVal[i]);
-//		cout << serialized[i];
-	}
+//	for(int i=0; i< length; i++) {
+//		printf("%c", retVal[i]);
+////		cout << serialized[i];
+//	}
 
 	printf("\n");
 //	cout << endl;
@@ -281,8 +281,7 @@ void Server::writeResponseToClient(int sockfd, bool succeed, char* retVal, int r
 	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
 	intToStringDigits(retValLen, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, numAsStr);
 
-	printf("numAsStr is: %s\n", numAsStr);
-	printf("retValLen is: %d\n", retValLen);
+	printf("numAsStr is: %s, retValLen is: %d\n", numAsStr, retValLen);
 
 	for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
 		printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
@@ -332,11 +331,11 @@ void Server::writeResponseToClient(int sockfd, bool succeed, char* retVal, int r
 void Server::printMsg(char* msg, int msgLen) {
 	cout << "message full len is: " << msgLen + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + NUM_OF_DIGITS_FOR_COMMAND_PREFIX << endl;
 	cout << "message len is: " << msgLen << endl;
-	cout << "message is: " << endl;
-	for (int i=0; i<msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
-		cout << msg[i];
-	}
-	cout << endl;
+//	cout << "message is: " << endl;
+//	for (int i=0; i<msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
+//		cout << msg[i];
+//	}
+//	cout << endl;
 }
 
 
@@ -414,7 +413,7 @@ int Server::receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char
 		cout << "totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
 		int ret = recv(clientSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
 		cout << "ret: " << ret << endl;
-		cout << "msg: " << msg << endl;
+//		cout << "msg: " << msg << endl;
 
 		if (ret == 0) {
 			removeClient(clientSockfd, ret);
@@ -440,7 +439,7 @@ int Server::receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char
 	return totalReceivedBytes;
 }
 
-void* Server::deserializeClientRequest(char* msg, int msgLen) {
+void* Server::deserializeClientRequest(int command, char* msg, int msgLen) {
 	cout << "Server::deserializeClientRequest" << endl;
 	return NULL;
 }

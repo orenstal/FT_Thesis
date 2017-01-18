@@ -100,8 +100,7 @@ class PALSManager {
 			spal_index = 0;
 		}
 
-		PALSManager(uint16_t mbId, uint64_t packId) {
-			PALSManager();
+		PALSManager(uint16_t mbId, uint64_t packId) : PALSManager() {
 			middleboxId = mbId;
 			packetId = packId;
 		}
@@ -132,7 +131,7 @@ class PALSManager {
 
 		void createGPalAndAdd(uint16_t var_id, const char* val) {
 			gpal gp;
-
+			cout << "createGPalAndAdd. gpal_index: " << unsigned(gpal_index) << endl;
 			memcpy(gp.val, val, GPAL_VAL_SIZE);
 			gp.var_id = var_id;
 

@@ -49,8 +49,10 @@ private:
 	int getHeadersLen(Packet *p);
 	int getPacketLen(Packet *p);
 
+	void serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len);
+
 protected:
-	void serializeObject(void* obj, char* serialized, int* len);
+	void serializeObject(int command, void* obj, char* serialized, int* len);
 	void handleReturnValue(int status, char* retVal, int len, int command);
 
 public:
@@ -62,9 +64,8 @@ public:
 	WrappedPacketData* createWPD(Packet *p, bool onlyHeader);
  };
 
-void PacketLoggerIVClient::serializeObject(void* obj, char* serialized, int* len) {
-	click_chatter("[increaseVersion] PacketLoggerClient::serializeObject");
-//	cout << "PacketLoggerClient::serializeObject" << endl;
+void PacketLoggerIVClient::serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len) {
+	cout << "PacketLoggerIVClient::serializeWrappedPacketDataObject" << endl;
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
 	uint16_t size = wpd->size;
 
@@ -87,9 +88,17 @@ void PacketLoggerIVClient::serializeObject(void* obj, char* serialized, int* len
 
 	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
 
-//	cout << "len is: " << *len << endl;
-	click_chatter("len is: %d", *len);
+	cout << "len is: " << *len << endl;
 }
+
+void PacketLoggerIVClient::serializeObject(int command, void* obj, char* serialized, int* len) {
+	cout << "PacketLoggerIVClient::serializeObject" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		serializeWrappedPacketDataObject(command, obj, serialized, len);
+	}
+}
+
 
 void PacketLoggerIVClient::handleReturnValue(int status, char* retVal, int len, int command) {
 	cout << "PacketLoggerIVClient::handleReturnValue" << endl;

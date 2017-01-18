@@ -14,13 +14,17 @@
 #define GPAL_VAL_SIZE 50
 
 #define STORE_COMMAND_TYPE 0
+#define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
+#define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
 
 using namespace std;
 
+// todo i need to use semaphores instead of mutexes so i'll be able to use multiple readers at the same time
+// todo add volatile to all indices ??
 
 typedef struct ServerProgressData {
-    vector<int> packet_ids_vector;
-    uint8_t index;
+    vector<uint64_t> packet_ids_vector;
+    uint32_t index;
 } ServerProgressData;
 
 
@@ -46,19 +50,25 @@ private:
 	map<uint16_t, ServerProgressData* > progressData;
 
 	// progress data
-	ServerProgressData* getOrCreateServerProgressData(int mbId);
+	ServerProgressData* getOrCreateServerProgressData(uint16_t mbId);
+	ServerProgressData* getServerProgressData(uint16_t mbId);
 	void addPacketId(uint64_t pid, ServerProgressData* spd);
 	void printProgressDataState();
 
 	// pals content
-	PacketData* getPacketData(PALSManager* pm);
+	PacketData* getOrCreatePacketData(PALSManager* pm);
+	PacketData* getPacketData(uint16_t mbId, uint64_t packId);
 	void updatePacketData(PacketData* packetData, PALSManager* pm);
+	void convertPacketDataToPM(PALSManager* pm, PacketData* packetData);
 	void printState();
 
+	void* deserializeClientStoreRequest(int command, char* msg, int msgLen);
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
+	bool processGetProcessedPacketsRequest(void* obj, char* retVal, int* retValLen);
+	bool processGetPalsRequest(void* obj, char* retVal, int* retValLen);
 
 protected:
-	void* deserializeClientRequest(char* msg, int msgLen);
+	void* deserializeClientRequest(int command, char* msg, int msgLen);
 	bool processRequest(void*, int command, char* retVal, int* retValLen);
 	void freeDeserializedObject(void* obj);
 
@@ -68,8 +78,22 @@ public:
 	}
  };
 
-void* DetLoggerServer::deserializeClientRequest(char* msg, int msgLen) {
+void* DetLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
 	cout << "DetLoggerServer::deserializeClientRequest" << endl;
+
+	if (command == STORE_COMMAND_TYPE) {
+		return deserializeClientStoreRequest(command, msg, msgLen);
+	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
+		return (void*)msg;
+	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		return (void*)msg;
+	}
+
+	return NULL;
+}
+
+void* DetLoggerServer::deserializeClientStoreRequest(int command, char* msg, int msgLen) {
+	cout << "DetLoggerServer::deserializeClientStoreRequest" << endl;
 	PALSManager* pm = new PALSManager();
 	PALSManager::deserialize(msg, pm);
 	return (void*)pm;
@@ -79,7 +103,7 @@ bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLe
 	cout << "DetLoggerServer::processStoreRequest" << endl;
 	PALSManager* pm = (PALSManager*)obj;
 	pm->printContent();
-	PacketData* packetData = getPacketData(pm);
+	PacketData* packetData = getOrCreatePacketData(pm);
 	updatePacketData(packetData, pm);
 
 	ServerProgressData* packetIds = getOrCreateServerProgressData(pm->getMBId());
@@ -92,11 +116,80 @@ bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLe
 	return true;
 }
 
+bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal, int* retValLen) {
+	cout << "DetLoggerServer::processGetProcessedPacketsRequest" << endl;
+
+	// extract the mbId from the client request
+	uint16_t mbId = *((uint16_t*)obj);
+	cout << "mbId is: " << mbId << endl;
+	ServerProgressData* spd = getServerProgressData(mbId);
+
+	if (spd == NULL) {
+		cout << "WARNING: spd is NULL !!" << endl;
+		*retValLen = 0;
+		return false;
+	}
+
+	uint64_t* returnValue = (uint64_t*)retVal;
+
+	// todo add mutex
+	vector<uint64_t> packetIds = spd->packet_ids_vector;
+	// todo free mutex
+
+	for (uint32_t i=0; i< spd->index; i++) {
+		returnValue[i] = packetIds[i];
+		cout << "returnValue[" << i << "]: " << returnValue[i] << endl;
+	}
+
+	*retValLen = spd->index * sizeof(uint64_t*);
+	cout << "retValLen: " << *retValLen << ", spd->index: " << spd->index << ", sizeof(uint64_t*): " << sizeof(uint64_t*) << endl;
+
+	return true;
+}
+
+bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retValLen) {
+	cout << "DetLoggerServer::processGetPalsRequest" << endl;
+	uint16_t mbId = 0;
+	uint64_t packId = 0;
+
+	// extract mbId and packId from client request
+	uint16_t *q = (uint16_t*)obj;
+	mbId = *q;
+	q++;
+
+	uint64_t *p = (uint64_t*)q;
+	packId = *p;
+
+	cout << "mbId is: " << mbId << ", packId: " << packId << endl;
+	PacketData* packetData = getPacketData(mbId, packId);
+
+	if (packetData == NULL) {
+		cout << "WARNING: packetData is NULL !!" << endl;
+		*retValLen = 0;
+		return false;
+	}
+
+	PALSManager* pm = new PALSManager(mbId, packId);
+//	pm->setMBId(mbId);
+//	pm->setPacketId(packId);
+
+	convertPacketDataToPM(pm, packetData);
+	PALSManager::serialize(pm, retVal, retValLen);
+
+	cout << "retValLen: " << *retValLen << endl;
+
+	return true;
+}
+
 bool DetLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "command is: " << command << endl;
 
 	if (command == STORE_COMMAND_TYPE) {
 		return processStoreRequest(obj, retVal, retValLen);
+	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
+		return processGetProcessedPacketsRequest(obj, retVal, retValLen);
+	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		return processGetPalsRequest(obj, retVal, retValLen);
 	}
 
 	return false;
@@ -129,7 +222,34 @@ void DetLoggerServer::updatePacketData(PacketData* packetData, PALSManager* pm) 
 	}
 }
 
-PacketData* DetLoggerServer::getPacketData(PALSManager* pm) {
+void DetLoggerServer::convertPacketDataToPM(PALSManager* pm, PacketData* packetData) {
+	cout << "DetLoggerServer::convertPacketDataToPM" << endl;
+
+	uint8_t gpalsLen = packetData->gpal_index;
+	cout << "gpalsLen: " << unsigned(gpalsLen) << endl;
+
+	for (uint8_t i=0; i<gpalsLen; i++) {
+		gpal* currGPal = packetData->gpal_vector[i];
+		pm->createGPalAndAdd(currGPal->var_id, currGPal->val);
+
+		cout << "gpal[" << unsigned(i) << "]->var_id: " << currGPal->var_id << endl;
+	}
+	cout << " done gpals" << endl;
+
+	uint8_t spalsLen = packetData->spal_index;
+	cout << "spalsLen: " << unsigned(spalsLen) << endl;
+
+	for (uint8_t i=0; i<spalsLen; i++) {
+		spal* currSPal = packetData->spal_vector[i];
+		pm->createSPalAndAdd(currSPal->var_id, currSPal->seq_num);
+
+		cout << "spal[" << unsigned(i) << "]->var_id: " << currSPal->var_id << endl;
+	}
+
+	cout << "[DetLoggerServer::convertPacketDataToPM] Done" << endl;
+}
+
+PacketData* DetLoggerServer::getOrCreatePacketData(PALSManager* pm) {
 	PacketData* packetData;
 
 	if (detData.find(pm->getMBId()) == detData.end()) {
@@ -154,14 +274,28 @@ PacketData* DetLoggerServer::getPacketData(PALSManager* pm) {
 	return packetData;
 }
 
+PacketData* DetLoggerServer::getPacketData(uint16_t mbId, uint64_t packId) {
+	cout << "DetLoggerServer::getPacketData" << endl;
+	PacketData* packetData = NULL;
+
+	if (detData.find(mbId) != detData.end()) {
+		cout << "mbId " << mbId << " exist in detData" << endl;
+		if (detData[mbId].find(packId) != detData[mbId].end()) {
+			cout << "packId " << packId << " exist in detData[mbId]" << endl;
+			packetData = detData[mbId][packId];
+		}
+	}
+
+	return packetData;
+}
+
 
 void DetLoggerServer::addPacketId(uint64_t pid, ServerProgressData* spd) {
-
 	spd->packet_ids_vector.push_back(pid);
 	spd->index++;
 }
 
-ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(int mbId) {
+ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(uint16_t mbId) {
 	ServerProgressData* spd;
 
 	if (progressData.find(mbId) == progressData.end()) {
@@ -172,6 +306,15 @@ ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(int mbId) {
 	}
 
 	return spd;
+}
+
+ServerProgressData* DetLoggerServer::getServerProgressData(uint16_t mbId) {
+
+	if (progressData.find(mbId) != progressData.end()) {
+		return progressData[mbId];
+	}
+
+	return NULL;
 }
 
 
