@@ -25,14 +25,38 @@
 using namespace std;
 CLICK_DECLS
 
+enum { H_MB_STATE_CALL, H_RECOVERY_MODE_CALL, H_TO_MASTER_CALL, H_ENFORCE_TO_MASTER_CALL };
+enum { MASTER, RECOVERING, SLAVE, ERROR };
+
 PreparePacket::PreparePacket()
 {
+	_mbState = ERROR;
 }
 
 PreparePacket::~PreparePacket()
 {
 }
 
+int
+PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
+{
+	bool isMasterMode = true;
+
+	if (Args(conf, this, errh)
+	.read_p("MASTER", isMasterMode)
+	.complete() < 0)
+		return -1;
+
+//	if (tci_word && !tci_word.equals("ANNO", 4)
+
+	if (isMasterMode) {
+		_mbState = MASTER;
+	} else {
+		_mbState = SLAVE;
+	}
+	cout << "isMaster mode? " << isMasterMode << endl;
+    return 0;
+}
 
 uint64_t
 PreparePacket::extractVlanByLevel(Packet *p, uint8_t level)
@@ -118,6 +142,90 @@ PreparePacket::pull(int)
     else
 	return 0;
 }
+
+void PreparePacket::recover() {
+	_mbState = RECOVERING;
+	printf("start recovering...\n");
+	fflush(stdout);
+}
+
+bool PreparePacket::isRecover() {
+	return (_mbState == RECOVERING);
+}
+
+bool PreparePacket::changeModeToMaster() {
+	if (_mbState == RECOVERING) {
+		return false;
+	}
+
+	doChangeModeToMaster();
+	return true;
+}
+
+void PreparePacket::doChangeModeToMaster() {
+	_mbState = MASTER;
+	printf("mode is changed to master\n");
+	fflush(stdout);
+}
+
+
+bool PreparePacket::isMaster() {
+	return (_mbState == MASTER);
+}
+
+
+String
+PreparePacket::read_handler(Element *e, void *thunk)
+{
+	PreparePacket *pp = (PreparePacket *)e;
+	switch ((intptr_t)thunk) {
+	case H_MB_STATE_CALL:
+		if (pp->isMaster()) {
+			return String("master");
+		} else if (pp->isRecover()){
+			return String("recovering");
+		} else {
+			return String("slave");
+		}
+	default:
+		return "<error>";
+	}
+}
+
+int
+PreparePacket::write_handler(const String &in_str, Element *e, void *thunk, ErrorHandler *errh)
+{
+	PreparePacket *pp = (PreparePacket *)e;
+	String str = in_str;
+	switch ((intptr_t)thunk) {
+	case H_TO_MASTER_CALL:
+		if (pp->changeModeToMaster()) {
+			return 0;
+		} else {
+			return errh->error("ERROR: mb is under recovery.");
+		}
+	case H_ENFORCE_TO_MASTER_CALL:
+		pp->doChangeModeToMaster();
+		return 0;
+	case H_RECOVERY_MODE_CALL:
+		pp->recover();
+		return 0;
+	default:
+		return errh->error("<internal>");
+	}
+}
+
+void
+PreparePacket::add_handlers()
+{
+	add_data_handlers("mb_id", Handler::h_read | Handler::h_write, &_mbId);
+
+	add_read_handler("state", read_handler, H_MB_STATE_CALL);
+	add_write_handler("toMaster", write_handler, H_TO_MASTER_CALL);
+	add_write_handler("enforceToMaster", write_handler, H_ENFORCE_TO_MASTER_CALL);
+	add_write_handler("recover", write_handler, H_RECOVERY_MODE_CALL);
+}
+
 
 
 CLICK_ENDDECLS

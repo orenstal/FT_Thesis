@@ -3,11 +3,11 @@
 Two directly connected switches plus a host for each switch:
 
 				 
-				 h2		h3
-				 | 		|
-   h1 --- s1 --- s2 --- s3 --- s4 --- h4
+				 h2		h3     h4
+				 | 		|      |
+   h1 --- s1 --- s2 --- s3 --- s4 --- h9
 				/  \
-			   s5   s6
+		 h8 -- s5   s6 -- h7
 			   |	|
 			   h5	h6
    
@@ -18,6 +18,9 @@ Two directly connected switches plus a host for each switch:
    h4 - packet logger server
    h5 - determinant logger server
    h6 - mb 1 (extracts packet id and sends records to determinant logger server [h5])
+   h7 - mb 1 *slave* (extracts packet id and sends records to determinant logger *slave* server [h8])
+   h8 - determinant logger *slave* server
+   h9 - framework manager (listen to user input and trigger recovery logic)
 
 Adding the 'topos' dict with a key/value pair to generate our newly defined
 topology enables one to pass in '--topo=mytopo' from the command line.
@@ -41,6 +44,9 @@ class MyTopo( Topo ):
 		packetLoggerServer = self.addHost( 'h4' )
 		determinantLoggerServer = self.addHost( 'h5' )
 		mb1 = self.addHost( 'h6' )
+		mb1Slave = self.addHost( 'h7' )
+		determinantLoggerSlaveServer = self.addHost( 'h8' )
+		frameworkManager = self.addHost( 'h9' )
 		s1 = self.addSwitch( 's1' )
 		s2 = self.addSwitch( 's2' )
 		s3 = self.addSwitch( 's3' )
@@ -60,5 +66,8 @@ class MyTopo( Topo ):
 		self.addLink( s4, packetLoggerServer )
 		self.addLink( s2, s5 )
 		self.addLink( s5, determinantLoggerServer )
+		self.addLink( s6, mb1Slave )
+		self.addLink( s5, determinantLoggerSlaveServer )
+		self.addLink( s4, frameworkManager )
 
 topos = { 'mytopo': ( lambda: MyTopo() ) }

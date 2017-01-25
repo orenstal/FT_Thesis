@@ -200,7 +200,7 @@ void Server::handleClientRequestThread(int sockfd) {
 	writeResponseToClient(sockfd, retStatus, retVal, retValLen);
 
 	delete msg;
-	freeDeserializedObject(obj);
+	freeDeserializedObject(obj, command);
 
 	// relevant when using multi-threading
 	FD_SET(newfd, &master); // add back to master set
@@ -222,10 +222,9 @@ bool Server::sendMsg(int sockfd, char* retVal, int length) {
 	//	cout << "in sendMsg.. length: " << length << ", msg: ";
 
 	// print message content
-//	for(int i=0; i< length; i++) {
-//		printf("%c", retVal[i]);
-////		cout << serialized[i];
-//	}
+	for(int i=0; i< length; i++) {
+		printf("%c", retVal[i]);
+	}
 
 	printf("\n");
 //	cout << endl;
@@ -240,20 +239,25 @@ bool Server::sendMsg(int sockfd, char* retVal, int length) {
 
 	// Write the message to the server
 	while (totalSentBytes < length) {
-		printf("sending..\n");
+		printf("sending.. totalSentBytes: %d\n", totalSentBytes);
+		fflush(stdout);
 		int ret = send(sockfd, retVal, length - totalSentBytes, 0);
 
 		if (ret == 0) {
 			printf("ERROR: The client is terminated. Stop sending..\n");
+			fflush(stdout);
 			break;
 		}
 
 		if (ret < 0) {
+			printf("ERROR: Failed to send. Trying one more time..\n");
+			fflush(stdout);
 			// trying to send one more time after failing the first time
 			ret = send(sockfd, retVal, length - totalSentBytes, 0);
 
 			if (ret == 0) {
 				printf("ERROR: The client is terminated. Stop sending..\n");
+				fflush(stdout);
 				exit(1);
 			}
 
@@ -267,6 +271,7 @@ bool Server::sendMsg(int sockfd, char* retVal, int length) {
 	}
 
 	printf("totalSentBytes: %d\n", totalSentBytes);
+	fflush(stdout);
 
 	if (totalSentBytes == length) {
 		return true;
@@ -449,6 +454,6 @@ bool Server::processRequest(void* obj, int command, char* retVal, int* retValLen
 	return true;
 }
 
-void Server::freeDeserializedObject(void* obj) {
+void Server::freeDeserializedObject(void* obj, int command) {
 	cout << "Server::freeObject" << endl;
 }

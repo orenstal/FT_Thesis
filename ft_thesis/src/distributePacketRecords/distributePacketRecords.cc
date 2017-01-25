@@ -58,6 +58,9 @@ using namespace std;
 CLICK_DECLS
 
 
+enum { H_MB_STATE_CALL, H_TO_MASTER_CALL, H_TO_SLAVE_CALL };
+
+
 class DetLoggerClient : public Client {
 
 private:
@@ -65,7 +68,7 @@ private:
 
 protected:
 	void serializeObject(int command, void* obj, char* serialized, int* len);
-	void handleReturnValue(int status, char* retVal, int len, int command);
+	void handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj);
 
 public:
 	DetLoggerClient(int port, char* address) : Client(port, address) {
@@ -89,7 +92,7 @@ void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, 
 	}
 }
 
-void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
 	cout << "DetLoggerClient::handleReturnValue" << endl;
 
 	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
@@ -133,7 +136,7 @@ DistributePacketRecords::configure(Vector<String> &conf, ErrorHandler *errh)
 
 		// todo slaveNotifierClient = ...
 	} else {
-		detLoggerClient = new DetLoggerClient(9095, "10.0.0.5");	// todo should be address of slave progress logger server
+		detLoggerClient = new DetLoggerClient(9095, "10.0.0.8");
 		detLoggerClient->connectToServer();
 	}
 
@@ -206,7 +209,7 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 
 	detLoggerClient->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
-	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
+	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -243,7 +246,7 @@ DistributePacketRecords::smactionMaster(Packet *p)
 Packet *
 DistributePacketRecords::smactionSlave(Packet *p)
 {
-	cout << "Slave mode - sending only data for 'progress logger'" << endl;
+	cout << "Slave mode - sending only data to 'progress logger'" << endl;
 
 	PALSManager* pm = new PALSManager (_mbId, PACKID_ANNO(p));
 
@@ -259,9 +262,26 @@ DistributePacketRecords::smaction(Packet *p)	// main logic - should be changed
 {
 	if (_isMasterMode) {
 		return smactionMaster(p);
-	} else {
+	} else {	// slave mode
 		return smactionSlave(p);
 	}
+}
+
+
+void DistributePacketRecords::changeModeToMaster() {
+	_isMasterMode = true;
+	printf("mode is changed to master\n");
+	fflush(stdout);
+}
+
+void DistributePacketRecords::changeModeToSlave() {
+	_isMasterMode = false;
+	printf("mode is changed to slave\n");
+	fflush(stdout);
+}
+
+bool DistributePacketRecords::isMaster() {
+	return _isMasterMode;
 }
 
 
@@ -281,11 +301,47 @@ DistributePacketRecords::pull(int)
 	return 0;
 }
 
+String
+DistributePacketRecords::read_handler(Element *e, void *thunk)
+{
+	DistributePacketRecords *dpr = (DistributePacketRecords *)e;
+	switch ((intptr_t)thunk) {
+	case H_MB_STATE_CALL:
+		if (dpr->isMaster()) {
+			return String("master");
+		} else {
+			return String("slave");
+		}
+	default:
+		return "<error>";
+	}
+}
+
+int
+DistributePacketRecords::write_handler(const String &in_str, Element *e, void *thunk, ErrorHandler *errh)
+{
+	DistributePacketRecords *dpr = (DistributePacketRecords *)e;
+	String str = in_str;
+	switch ((intptr_t)thunk) {
+	case H_TO_MASTER_CALL:
+		dpr->changeModeToMaster();
+		return 0;
+	case H_TO_SLAVE_CALL:
+		dpr->changeModeToSlave();
+		return 0;
+	default:
+		return errh->error("<internal>");
+	}
+}
 
 void
 DistributePacketRecords::add_handlers()
 {
 	add_data_handlers("mb_id", Handler::h_read | Handler::h_write, &_mbId);
+
+	add_read_handler("state", read_handler, H_MB_STATE_CALL);
+	add_write_handler("toMaster", write_handler, H_TO_MASTER_CALL);
+	add_write_handler("toSlave", write_handler, H_TO_SLAVE_CALL);
 }
 
 CLICK_ENDDECLS

@@ -1,35 +1,6 @@
-#include <stdio.h>
-#include <string>
-#include <string.h>
-#include <iostream>
-#include "../common/pal_api/pals_manager.hh"
-#include "client.hh"
 
-#define STORE_COMMAND_TYPE 0
-#define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
-#define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
+#include "det_logger_client.hh"
 
-using namespace std;
-
-class DetLoggerClient : public Client {
-
-private:
-	void serializePalsManagerObject(int command, void* obj, char* serialized, int* len);
-	void serializeGetPalsByMBIdAndPackId(int command, void* obj, char* serialized, int* len);
-	void handleGetPacketIdsResponse(int command, char* retVal, int len);
-	void handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen);
-
-protected:
-	void serializeObject(int command, void* obj, char* serialized, int* len);
-	void handleReturnValue(int status, char* retVal, int len, int command);
-
-public:
-	DetLoggerClient(int port, char* address) : Client(port, address) {
-		// do nothing
-	}
-
-//	void serializePalsManager (PALSManager* pm, char* serialized, int* len);
- };
 
 void DetLoggerClient::serializePalsManagerObject(int command, void* obj, char* serialized, int* len) {
 	cout << "DetLoggerClient::serializePalsManagerObject" << endl;
@@ -66,43 +37,101 @@ void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, 
 	}
 }
 
-void DetLoggerClient::handleGetPacketIdsResponse(int command, char* retVal, int len) {
+void DetLoggerClient::handleGetPacketIdsResponse(int command, char* retVal, int len, void* retValAsObj) {
 	cout << "DetLoggerClient::handleGetPacketIdsResponse" << endl;
 	cout << "len is: " << len << ", retVal is: " << retVal << endl;
 
+	vector<uint64_t> * vectorRetVal = static_cast<vector<uint64_t>*>(retValAsObj);
+	cout << "starting with vectorRetVal size: " << vectorRetVal->size() << endl;
+
 	uint64_t* ret = (uint64_t*)retVal;
-	uint32_t numOfPacketIds = len/sizeof(uint64_t*);
+	uint32_t numOfPacketIds = len/sizeof(uint64_t*);	//todo should be sizeof(uint64_t) ??
 	cout << "numOfPacketIds: " << numOfPacketIds << ", received packet ids are:" << endl;
 
 	for (uint32_t i =0; i<numOfPacketIds; i++) {
 		cout << "ret[" << i << "]: " << ret[i] << endl;
+		vectorRetVal->push_back(ret[i]);
 	}
-
+	cout << "leaving with vectorRetVal size: " << vectorRetVal->size() << endl;
 	cout << "done handling" << endl;
 }
 
-void DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen) {
+void DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen, void* retValAsObj) {
 	cout << "DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse" << endl;
-	PALSManager* pm = new PALSManager();
+	PALSManager* pm = static_cast<PALSManager*>(retValAsObj);
+
 	PALSManager::deserialize(retVal, pm);
 
 	pm->printContent();
+	*((PALSManager*)retValAsObj) = *pm;
 	cout << "[DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse] done" << endl;
 }
 
-void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command) {
+void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
 	cout << "DetLoggerClient::handleReturnValue" << endl;
 
 	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
 		cout << "nothing to handle." << endl;
 	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
-		handleGetPacketIdsResponse(command, retVal, len);
+		handleGetPacketIdsResponse(command, retVal, len, retValAsObj);
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
-		handleGetPalsByMBIdAndPackIdResponse(command, retVal, len);
+		handleGetPalsByMBIdAndPackIdResponse(command, retVal, len, retValAsObj);
 	}
 }
 
-PALSManager* prepareTest1() {
+void DetLoggerClient::runTests(char* address) {
+	cout << "starting det logger client" << endl;
+
+	DetLoggerClient *client = new DetLoggerClient(9095, address);	// "127.0.0.1"
+	client->connectToServer();
+
+	cout << "start running test 1..." << endl;
+	runTestAndCompare(client);
+
+	cout << "\nstart running test 2..." << endl;
+	PALSManager* pm = prepareDetLoggerTest2();
+	runDetLoggerTest(client, pm);
+	delete pm;
+
+	cout << "\nstart running test 3..." << endl;
+	pm = prepareDetLoggerTest3();
+	runDetLoggerTest(client, pm);
+	delete pm;
+
+	cout << "\nstart running test 4..." << endl;
+	PALSManager* pm1 = prepareDetLoggerTest4();
+	runDetLoggerTest(client, pm1);
+	delete pm1;
+
+	cout << "\nstart getting mb 1 processed packets..." << endl;
+	uint16_t* mbId = new uint16_t;
+	*mbId = 1;
+	getProcessedPacketIds(client, mbId);
+	delete mbId;
+
+	cout << "\nstart getting mb 2 processed packets..." << endl;
+	mbId = new uint16_t;
+	*mbId = 2;
+	getProcessedPacketIds(client, mbId);
+	delete mbId;
+
+	cout << "\nstart getting pals for mbId 1, packId 331..." << endl;
+	void* inputs = prepareGetPalsTest(1, 331);
+	getPals(client, inputs);
+	delete (char*)inputs;
+
+	cout << "\nstart getting pals for mbId 1, packId 332..." << endl;
+	inputs = prepareGetPalsTest(1, 332);
+	getPals(client, inputs);
+	delete (char*)inputs;
+
+	cout << "\nstart getting pals for mbId 2, packId 331..." << endl;
+	inputs = prepareGetPalsTest(2, 331);
+	getPals(client, inputs);
+	delete (char*)inputs;
+}
+
+PALSManager* DetLoggerClient::prepareDetLoggerTest1() {
 	cout << "preparing test 1" << endl;
 
 	PALSManager* pm = new PALSManager(1, 331L);
@@ -111,7 +140,7 @@ PALSManager* prepareTest1() {
 	return pm;
 }
 
-PALSManager* prepareTest2() {
+PALSManager* DetLoggerClient::prepareDetLoggerTest2() {
 	cout << "preparing test 2" << endl;
 
 	PALSManager* pm = new PALSManager(1, 332L);
@@ -132,7 +161,8 @@ PALSManager* prepareTest2() {
 	return pm;
 }
 
-PALSManager* prepareTest3() {
+
+PALSManager* DetLoggerClient::prepareDetLoggerTest3() {
 	cout << "preparing test 3" << endl;
 
 	PALSManager* pm = new PALSManager(1, 332L);
@@ -144,7 +174,7 @@ PALSManager* prepareTest3() {
 	return pm;
 }
 
-PALSManager* prepareTest4() {
+PALSManager* DetLoggerClient::prepareDetLoggerTest4() {
 	cout << "preparing test 4" << endl;
 
 	PALSManager* pm = new PALSManager(2, 331L);
@@ -153,7 +183,7 @@ PALSManager* prepareTest4() {
 	return pm;
 }
 
-void* prepareGetPalsTest(uint16_t mbId, uint64_t packId) {
+void* DetLoggerClient::prepareGetPalsTest(uint16_t mbId, uint64_t packId) {
 	cout << "preparing get pals test for mbId: " << mbId << ", packId: " << packId << endl;
 
 	char* input = new char[sizeof(uint16_t)+sizeof(uint64_t)+1];
@@ -167,18 +197,18 @@ void* prepareGetPalsTest(uint16_t mbId, uint64_t packId) {
 	return (void*)input;
 }
 
-void runTestAndCompare(DetLoggerClient *client) {
+void DetLoggerClient::runTestAndCompare(DetLoggerClient *client) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	PALSManager* pm = prepareTest1();
+	PALSManager* pm = prepareDetLoggerTest1();
 
 	client->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
 	PALSManager* pm1 = new PALSManager(1, 444L);
 	PALSManager::deserialize(serialized+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, pm1);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -214,13 +244,13 @@ void runTestAndCompare(DetLoggerClient *client) {
 	delete pm;
 }
 
-void runTest(DetLoggerClient *client, PALSManager* pm) {
+void DetLoggerClient::runDetLoggerTest(DetLoggerClient *client, PALSManager* pm) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
 	client->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -230,13 +260,17 @@ void runTest(DetLoggerClient *client, PALSManager* pm) {
 
 }
 
-void getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId) {
+void DetLoggerClient::getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
+	vector<uint64_t> retValAsObj;
+//	uint64_t *test = new uint64_t();
+//	*test = 1;
+//	retValAsObj.push_back(test);
 
 	client->prepareToSend((void*)mbId, serialized, &len, GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len, GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -244,16 +278,34 @@ void getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId) {
 		cout << "failed to send" << endl;
 	}
 
+//	retValAsObj = *reinterpret_cast<vector<uint64_t*> *>(voidPointerName);
+
+	if (retValAsObj.empty()) {
+		cout << "still empty!!" << endl;
+	}
+//	cout << "1" << endl;
+//	vector<uint64_t> vec = *retValAsObj;
+//	cout << "2" << endl;
+//	cout << "vec is: " << vec << endl;
+	cout << "retValAsObj size is: " << retValAsObj.size() << endl;
+
+	for (int i=0; i<retValAsObj.size(); i++) {
+		cout << retValAsObj[i] << endl;
+	}
+
+	cout << "done" << endl;
+
 }
 
-void getPals(DetLoggerClient *client, void* msgToSend) {
+void DetLoggerClient::getPals(DetLoggerClient *client, void* msgToSend) {
 
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
+	PALSManager retValAsObj;
 
 	client->prepareToSend(msgToSend, serialized, &len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -261,58 +313,14 @@ void getPals(DetLoggerClient *client, void* msgToSend) {
 		cout << "failed to send" << endl;
 	}
 
+	cout << "1" << endl;
+	retValAsObj.printContent();
+	cout << "done" << endl;
+
 }
 
-int main () {
-	cout << "starting det logger client" << endl;
 
-	DetLoggerClient *client = new DetLoggerClient(9095, "127.0.0.1");
-	client->connectToServer();
-
-	cout << "start running test 1..." << endl;
-	runTestAndCompare(client);
-
-	cout << "\nstart running test 2..." << endl;
-	PALSManager* pm = prepareTest2();
-	runTest(client, pm);
-	delete pm;
-
-	cout << "\nstart running test 3..." << endl;
-	pm = prepareTest3();
-	runTest(client, pm);
-	delete pm;
-
-	cout << "\nstart running test 4..." << endl;
-	PALSManager* pm1 = prepareTest4();
-	runTest(client, pm1);
-	delete pm1;
-
-	cout << "\nstart getting mb 1 processed packets..." << endl;
-	uint16_t* mbId = new uint16_t;
-	*mbId = 1;
-	getProcessedPacketIds(client, mbId);
-	delete mbId;
-
-	cout << "\nstart getting mb 2 processed packets..." << endl;
-	mbId = new uint16_t;
-	*mbId = 2;
-	getProcessedPacketIds(client, mbId);
-	delete mbId;
-
-	cout << "\nstart getting pals for mbId 1, packId 331..." << endl;
-	void* inputs = prepareGetPalsTest(1, 331);
-	getPals(client, inputs);
-	delete (char*)inputs;
-
-	cout << "\nstart getting pals for mbId 1, packId 332..." << endl;
-	inputs = prepareGetPalsTest(1, 332);
-	getPals(client, inputs);
-	delete (char*)inputs;
-
-	cout << "\nstart getting pals for mbId 2, packId 331..." << endl;
-	inputs = prepareGetPalsTest(2, 331);
-	getPals(client, inputs);
-	delete (char*)inputs;
-
-	return 0;
-}
+//int main(int argc, char *argv[]) {
+//	DetLoggerClient::runTests("127.0.0.1");
+//	return 0;
+//}

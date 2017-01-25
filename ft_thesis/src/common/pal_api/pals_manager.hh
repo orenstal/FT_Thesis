@@ -33,49 +33,7 @@ typedef struct spal {
 } spal;
 
 
-static void serializeGPal(gpal* gpal, char* serializedMsg) {
-	uint16_t *q = (uint16_t*)serializedMsg;
-	*q = gpal->var_id;
-	q++;
 
-	char *p = (char*)q;
-	char* gpalValue = gpal->val;
-
-	for (int i=0; i< GPAL_VAL_SIZE; i++, p++) {
-		*p = gpalValue[i];
-	}
-}
-
-static void deserializeGPal(char* serializedMsg, gpal* gpal) {
-	uint16_t *q = (uint16_t*)serializedMsg;
-	gpal->var_id = *q;
-	q++;
-
-	char *p = (char*)q;
-	char* gpalValue = gpal->val;
-
-	for (int i=0; i< GPAL_VAL_SIZE; i++, p++) {
-		gpalValue[i] = *p;
-	}
-}
-
-static void serializeSPal(spal* spal, char* serializedMsg) {
-	uint16_t *q = (uint16_t*)serializedMsg;
-	*q = spal->var_id;
-	q++;
-
-	uint32_t *p = (uint32_t*)q;
-	*p = spal->seq_num;
-}
-
-static void deserializeSPal(char* serializedMsg, spal* spal) {
-	uint16_t *q = (uint16_t*)serializedMsg;
-	spal->var_id = *q;
-	q++;
-
-	uint32_t *p = (uint32_t*)q;
-	spal->seq_num = *p;
-}
 
 
 class PALSManager {
@@ -265,7 +223,7 @@ class PALSManager {
 			gpal *p = (gpal*)q;
 
 			for (int i=0; i<gpalListSize; i++, p++) {
-				::serializeGPal(&gpalList[i], (char*)p);
+				serializeGPal(&gpalList[i], (char*)p);
 			}
 
 			return (char*)p;
@@ -282,7 +240,7 @@ class PALSManager {
 			spal *p = (spal*)q;
 
 			for (int i=0; i<spalListSize; i++, p++) {
-				::serializeSPal(&spalList[i], (char*)p);
+				serializeSPal(&spalList[i], (char*)p);
 			}
 
 			return (char*)p;
@@ -313,7 +271,7 @@ class PALSManager {
 			gpal *p = (gpal*)q;
 
 			for (int i=0; i<gpalListSize; i++, p++) {
-				::deserializeGPal((char*)p, &gpalList[i]);
+				deserializeGPal((char*)p, &gpalList[i]);
 			}
 
 			return (char*)p;
@@ -330,10 +288,54 @@ class PALSManager {
 			spal *p = (spal*)q;
 
 			for (int i=0; i<spalListSize; i++, p++) {
-				::deserializeSPal((char*)p, &spalList[i]);
+				deserializeSPal((char*)p, &spalList[i]);
 			}
 
 			return (char*)p;
+		}
+
+		static void serializeGPal(gpal* gpal, char* serializedMsg) {
+			uint16_t *q = (uint16_t*)serializedMsg;
+			*q = gpal->var_id;
+			q++;
+
+			char *p = (char*)q;
+			char* gpalValue = gpal->val;
+
+			for (int i=0; i< GPAL_VAL_SIZE; i++, p++) {
+				*p = gpalValue[i];
+			}
+		}
+
+		static void deserializeGPal(char* serializedMsg, gpal* gpal) {
+			uint16_t *q = (uint16_t*)serializedMsg;
+			gpal->var_id = *q;
+			q++;
+
+			char *p = (char*)q;
+			char* gpalValue = gpal->val;
+
+			for (int i=0; i< GPAL_VAL_SIZE; i++, p++) {
+				gpalValue[i] = *p;
+			}
+		}
+
+		static void serializeSPal(spal* spal, char* serializedMsg) {
+			uint16_t *q = (uint16_t*)serializedMsg;
+			*q = spal->var_id;
+			q++;
+
+			uint32_t *p = (uint32_t*)q;
+			*p = spal->seq_num;
+		}
+
+		static void deserializeSPal(char* serializedMsg, spal* spal) {
+			uint16_t *q = (uint16_t*)serializedMsg;
+			spal->var_id = *q;
+			q++;
+
+			uint32_t *p = (uint32_t*)q;
+			spal->seq_num = *p;
 		}
 };
 

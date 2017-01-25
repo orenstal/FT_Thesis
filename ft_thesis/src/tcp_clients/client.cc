@@ -11,10 +11,10 @@
 using namespace std;
 
 // todo for click usage. Comment for local interface.
-#include <click/config.h>
-#include <click/args.hh>
-#include <click/glue.hh>
-CLICK_DECLS
+//#include <click/config.h>
+//#include <click/args.hh>
+//#include <click/glue.hh>
+//CLICK_DECLS
 
 
 Client::Client(int port, char* address) {
@@ -56,7 +56,7 @@ void Client::serializeObject(int command, void* obj, char* serialized, int* len)
 	//	cout << "Client::serializeObject" << endl;
 }
 
-void Client::handleReturnValue(int status, char* retVal, int len, int command) {
+void Client::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
 	printf("Client::handleReturnValue\n");
 }
 
@@ -277,7 +277,7 @@ int Client::receiveMsgFromServer (int serverSockfd, int totalReceivedBytes, char
 }
 
 
-bool Client::sendMsgAndWait(char* serialized, int length, int command) {
+bool Client::sendMsgAndWait(char* serialized, int length, int command, void* retValAsObj) {
 	sendMsg(serialized, length);
 	char* retVal = new char[MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 	int retValLen = 0;
@@ -295,7 +295,7 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command) {
 
 	if (retValLen > 0) {
 		printf("received message length > 0. Calling to handleReturnValue\n");
-		handleReturnValue(status, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, retValLen, command);
+		handleReturnValue(status, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, retValLen, command, retValAsObj);
 	}
 
 	return true;
@@ -324,8 +324,8 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command) {
 
 
 // todo for click usage.
-CLICK_ENDDECLS
-ELEMENT_PROVIDES(TCPClient)
+//CLICK_ENDDECLS
+//ELEMENT_PROVIDES(TCPClient)
 
 
 

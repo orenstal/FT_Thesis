@@ -36,11 +36,18 @@ public:
 
 	int configure(Vector<String> &conf, ErrorHandler *errh) CLICK_COLD;
 	bool can_live_reconfigure() const	{ return true; }
-//	void add_handlers() CLICK_COLD;
+	void add_handlers() CLICK_COLD;
 
 	Packet *smaction(Packet *p);
 	void push(int port, Packet *p);
 	Packet *pull(int port);
+
+	void changeModeToMaster();
+	void changeModeToSlave();
+	bool isMaster();
+
+	static String read_handler(Element *e, void *user_data) CLICK_COLD;
+	static int write_handler(const String &str, Element *e, void *user_data, ErrorHandler *errh) CLICK_COLD;
 };
 
 

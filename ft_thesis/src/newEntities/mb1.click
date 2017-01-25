@@ -4,6 +4,9 @@ classifier   :: Classifier(12/8100 /* 802.1Q packets */, -);
 ipClassifier :: Classifier(12/0800 /* IP packets */, -);
 //tcpClassifier :: IPClassifier(10.0.0.0/24 and tcp, -);
 out          :: Queue -> ToDevice("h6-eth0");
+pp           :: preparePacket(true);
+ivn          :: increaseVersionNumber(true, false);
+dpr         :: distributePacketRecords(1, true)	/*this element should be the last one before out or discard elements!!*/
 
 FromDevice("h6-eth0")
 	-> classifier
@@ -12,11 +15,10 @@ FromDevice("h6-eth0")
 //        -> CheckIPHeader(14, CHECKSUM false)
 //        -> tcpClassifier
 	-> Unstrip(16)
-	-> preparePacket()
+	-> pp
 	-> Print()
-//	-> ditributePacketRecords(1, false)
-	-> increaseVersionNumber
-	-> ditributePacketRecords(1, true)	/*this element should be the last one before out or discard elements!!*/
+	-> ivn
+	-> dpr	/*this element should be the last one before out or discard elements!!*/
 //	-> setIdAnno
 	-> out;
 

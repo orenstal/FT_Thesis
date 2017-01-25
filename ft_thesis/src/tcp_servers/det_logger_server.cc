@@ -70,7 +70,7 @@ private:
 protected:
 	void* deserializeClientRequest(int command, char* msg, int msgLen);
 	bool processRequest(void*, int command, char* retVal, int* retValLen);
-	void freeDeserializedObject(void* obj);
+	void freeDeserializedObject(void* obj, int command);
 
 public:
 	DetLoggerServer(int port) : Server(port) {
@@ -127,7 +127,7 @@ bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal,
 	if (spd == NULL) {
 		cout << "WARNING: spd is NULL !!" << endl;
 		*retValLen = 0;
-		return false;
+		return true;
 	}
 
 	uint64_t* returnValue = (uint64_t*)retVal;
@@ -373,8 +373,14 @@ void DetLoggerServer::printProgressDataState() {
 
 
 
-void DetLoggerServer::freeDeserializedObject(void* obj) {
-	delete (PALSManager*)obj;
+void DetLoggerServer::freeDeserializedObject(void* obj, int command) {
+	if (command == STORE_COMMAND_TYPE) {
+		delete (PALSManager*)obj;
+	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
+		// do nothing
+	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		// do nothing
+	}
 }
 
 

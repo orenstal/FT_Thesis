@@ -74,7 +74,7 @@ class Server {
 	protected:
 		virtual void* deserializeClientRequest(int command, char* msg, int msgLen);
 		virtual bool processRequest(void* obj, int command, char* retVal, int* retValLen);
-		virtual void freeDeserializedObject(void* obj);
+		virtual void freeDeserializedObject(void* obj, int command);
 
 	public:
 		Server(int port);

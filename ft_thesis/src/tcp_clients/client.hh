@@ -41,13 +41,13 @@ protected:
 	int sockfd;
 
 	virtual void serializeObject(int command, void* obj, char* serialized, int* len);
-	virtual void handleReturnValue(int status, char* retVal, int len, int command);
+	virtual void handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj);
 
 public:
 	Client(int port, char* address);
 	void connectToServer();
 	void prepareToSend(void* obj, char* serialized, int* len, int command);
-	bool sendMsgAndWait(char* serialized, int length, int command);
+	bool sendMsgAndWait(char* serialized, int length, int command, void* retValAsObj);
 };
 
 

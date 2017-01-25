@@ -42,6 +42,7 @@
 using namespace std;
 CLICK_DECLS
 
+enum { H_MB_STATE_CALL, H_TO_MASTER_CALL, H_TO_SLAVE_CALL };
 
 class PacketLoggerIVClient : public Client {
 
@@ -53,7 +54,7 @@ private:
 
 protected:
 	void serializeObject(int command, void* obj, char* serialized, int* len);
-	void handleReturnValue(int status, char* retVal, int len, int command);
+	void handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj);
 
 public:
 	PacketLoggerIVClient(int port, char* address) : Client(port, address) {
@@ -100,7 +101,7 @@ void PacketLoggerIVClient::serializeObject(int command, void* obj, char* seriali
 }
 
 
-void PacketLoggerIVClient::handleReturnValue(int status, char* retVal, int len, int command) {
+void PacketLoggerIVClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
 	cout << "PacketLoggerIVClient::handleReturnValue" << endl;
 
 	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
@@ -239,6 +240,7 @@ IncreaseVersionNumber::configure(Vector<String> &conf, ErrorHandler *errh)
 
 	_isMasterMode = isMasterMode;
 	_onlyHeader = onlyHeader;
+	cout << "increaseVersionNumber configure" << endl;
 	cout << "isMaster mode? " << _isMasterMode << endl;
 	cout << "onlyHeader? " << _onlyHeader << endl;
 
@@ -246,14 +248,6 @@ IncreaseVersionNumber::configure(Vector<String> &conf, ErrorHandler *errh)
 		client = new PacketLoggerIVClient(9097, "10.0.0.4");
 		client->connectToServer();
 	}
-
-	// todo this code works and designed for listening to master/slave changes (not for the regular behavior)
-//	pthread_t t1;
-//	pthread_create(&t1, NULL, &PacketIdEncap::print_message, NULL);
-
-	cout << "continue.." << endl;
-
-
 
     return 0;
 }
@@ -272,7 +266,7 @@ void IncreaseVersionNumber::sendToLogger(WrappedPacketData* wpd) {
 
 	client->prepareToSend((void*)wpd, serialized, &len, STORE_COMMAND_TYPE);
 
-	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
 		cout << "succeed to send" << endl;
@@ -351,6 +345,22 @@ IncreaseVersionNumber::smaction(Packet *p)	// main logic
 	return q;
 }
 
+void IncreaseVersionNumber::changeModeToMaster() {
+	_isMasterMode = true;
+	printf("mode is changed to master\n");
+	fflush(stdout);
+}
+
+void IncreaseVersionNumber::changeModeToSlave() {
+	_isMasterMode = false;
+	printf("mode is changed to slave\n");
+	fflush(stdout);
+}
+
+bool IncreaseVersionNumber::isMaster() {
+	return _isMasterMode;
+}
+
 
 void
 IncreaseVersionNumber::push(int, Packet *p)
@@ -366,6 +376,47 @@ IncreaseVersionNumber::pull(int)
 	return smaction(p);
     else
 	return 0;
+}
+
+String
+IncreaseVersionNumber::read_handler(Element *e, void *thunk)
+{
+	IncreaseVersionNumber *ivn = (IncreaseVersionNumber *)e;
+	switch ((intptr_t)thunk) {
+	case H_MB_STATE_CALL:
+		if (ivn->isMaster()) {
+			return String("master");
+		} else {
+			return String("slave");
+		}
+	default:
+		return "<error>";
+	}
+}
+
+int
+IncreaseVersionNumber::write_handler(const String &in_str, Element *e, void *thunk, ErrorHandler *errh)
+{
+	IncreaseVersionNumber *ivn = (IncreaseVersionNumber *)e;
+	String str = in_str;
+	switch ((intptr_t)thunk) {
+	case H_TO_MASTER_CALL:
+		ivn->changeModeToMaster();
+		return 0;
+	case H_TO_SLAVE_CALL:
+		ivn->changeModeToSlave();
+		return 0;
+	default:
+		return errh->error("<internal>");
+	}
+}
+
+void
+IncreaseVersionNumber::add_handlers()
+{
+	add_read_handler("state", read_handler, H_MB_STATE_CALL);
+	add_write_handler("toMaster", write_handler, H_TO_MASTER_CALL);
+	add_write_handler("toSlave", write_handler, H_TO_SLAVE_CALL);
 }
 
 //void

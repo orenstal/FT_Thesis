@@ -36,6 +36,10 @@ class DistributePacketRecords : public Element { public:
 	static void* print_message(void* voidArgs);
 	static int connectToServer(int port, char* address);
 
+	void changeModeToMaster();
+	void changeModeToSlave();
+	bool isMaster();
+
   private:
 	
 	uint16_t _mbId;
