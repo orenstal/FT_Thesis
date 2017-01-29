@@ -181,7 +181,7 @@ WrappedPacketData* PacketLoggerClient::preparePacketLoggerClientTest1() {
 	wpd->offset = 0;
 	wpd->size = 15;
 
-	char data[wpd->size];
+	unsigned char data[wpd->size];
 	memset(data, 0, wpd->size);
 
 	for (int i=0; i< wpd->size; i++) {
@@ -202,7 +202,7 @@ WrappedPacketData* PacketLoggerClient::preparePacketLoggerClientTest2() {
 	wpd->offset = 10;
 	wpd->size = 15;
 
-	char data[wpd->size];
+	unsigned char data[wpd->size];
 	memset(data, 0, wpd->size);
 
 	for (int i=0; i< wpd->size; i++) {
@@ -222,7 +222,7 @@ WrappedPacketData* PacketLoggerClient::preparePacketLoggerClientTest3() {
 	wpd->offset = 13;
 	wpd->size = 10;
 
-	char data[wpd->size];
+	unsigned char data[wpd->size];
 	memset(data, 0, wpd->size);
 
 	for (int i=0; i< wpd->size; i++) {
@@ -242,7 +242,7 @@ WrappedPacketData* PacketLoggerClient::preparePacketLoggerClientTest4() {
 	wpd->offset = 0;
 	wpd->size = 10;
 
-	char data[wpd->size];
+	unsigned char data[wpd->size];
 	memset(data, 0, wpd->size);
 
 	for (int i=0; i< wpd->size; i++) {

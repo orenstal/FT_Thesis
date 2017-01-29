@@ -12,7 +12,7 @@ typedef struct WrappedPacketData {
     uint64_t packetId;
     uint16_t offset;
     uint16_t size;
-    char* data;
+    unsigned char* data;
 } WrappedPacketData;
 
 

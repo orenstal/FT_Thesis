@@ -76,8 +76,12 @@ bool Server::run() {
 		read_fds = master;
 		pthread_mutex_unlock(&master_set_mtx);
 
+//		cout << "does 38 in read_fds? " << FD_ISSET(38, &read_fds) << endl;
+//		cout << "does 39 in read_fds? " << FD_ISSET(39, &read_fds) << endl;
+
 		if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
-			cout << "ERROR: Server-select() error lol!" << endl;
+			cout << "ERROR: Server-select() error lol! " << endl;
+			cout << "Reason: " << errno << endl;
 			exit(1);
 		}
 
@@ -112,6 +116,7 @@ bool Server::run() {
 
 					// sync handling
 					handleClientRequestThread(*currIter);
+					break;	// todo It makes me give higher priority to the first registered clients.
 				}
 			}
 		}

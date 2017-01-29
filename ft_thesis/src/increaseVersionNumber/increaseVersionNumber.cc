@@ -81,11 +81,15 @@ void PacketLoggerIVClient::serializeWrappedPacketDataObject(int command, void* o
 	*p = size;
 	p++;
 
-	char *r = (char*)p;
+//	char *r = (char*)p;
+//
+//	for (int i=0; i< size; i++, r++) {
+//		*r = wpd->data[i];
+//	}
 
-	for (int i=0; i< size; i++, r++) {
-		*r = wpd->data[i];
-	}
+	unsigned char *r = (unsigned char*)p;
+	const unsigned char* data = wpd->data;
+	memcpy(r, data, size);
 
 	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
 
@@ -196,6 +200,10 @@ WrappedPacketData* PacketLoggerIVClient::createWPD(Packet *p, bool onlyHeader) {
 	wpd->offset = 0;
 	wpd->size = len;
 
+	unsigned char* data = new unsigned char[wpd->size];
+	memcpy(data, packetData, wpd->size);
+
+	/*
 	char* data = new char[wpd->size];
 //	char data[wpd->size];
 	memset(data, 0, wpd->size);
@@ -207,7 +215,7 @@ WrappedPacketData* PacketLoggerIVClient::createWPD(Packet *p, bool onlyHeader) {
 	}
 	cout << endl;
 //	cout << "sizeof(char): " << sizeof(char) << ", sizeof(char*): " << sizeof(char*) << ", sizeof(unsigned char): " << sizeof(unsigned char) << ", sizeof(unsigned char*): " << sizeof(unsigned char*) << endl;
-
+	*/
 	wpd->data = data;
 
 	cout << "done filling wrapped packet data" << endl;

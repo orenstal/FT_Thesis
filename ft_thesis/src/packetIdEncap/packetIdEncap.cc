@@ -90,13 +90,16 @@ void PacketLoggerClient::serializeWrappedPacketDataObject(int command, void* obj
 	*p = size;
 	p++;
 
-	char *r = (char*)p;
-
+	unsigned char *r = (unsigned char*)p;
+	const unsigned char* data = wpd->data;
+	memcpy(r, data, size);
+	/*
 	for (int i=0; i< size; i++, r++) {
 		*r = wpd->data[i];
 	}
+	*/
 
-	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
+	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(unsigned char) * size);
 
 	cout << "len is: " << *len << endl;
 }
@@ -334,28 +337,6 @@ PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 }
 
 
-// todo for testing...
-
-WrappedPacketData* prepareTest1() {
-	cout << "preparing test 1" << endl;
-
-	WrappedPacketData* wpd = new WrappedPacketData;
-	wpd->packetId = 193L;
-	wpd->offset = 12;
-	wpd->size = 15;
-
-	char data[wpd->size];
-	memset(data, 0, wpd->size);
-
-	for (int i=0; i< wpd->size; i++) {
-		data[i] = 'a';
-	}
-
-	wpd->data = data;
-
-	return wpd;
-}
-
 int PacketIdEncap::getHeadersLen(Packet *p) {
 	cout << "getHeadersLen" << endl;
 
@@ -443,16 +424,21 @@ WrappedPacketData* PacketIdEncap::createWPD(Packet *p) {
 	wpd->offset = 0;
 	wpd->size = len;
 
-	char* data = new char[wpd->size];
+	unsigned char* data = new unsigned char[wpd->size];
 //	char data[wpd->size];
-	memset(data, 0, wpd->size);
+//	memset(data, 0, wpd->size);
+//	cout << "sizeof(const unsigned char): " << sizeof(const unsigned char) << endl;
+//	cout << "sizeof(unsigned char): " << sizeof(unsigned char) << endl;
+//	cout << "sizeof(char): " << sizeof(char) << endl;
 
-	for (int i=0; i< wpd->size; i++, packetData++) {
-		cout << isprint(packetData[i]) << ",";
-		cout << static_cast<unsigned>(packetData[i]) << endl;
-		data[i] = packetData[i];
-	}
-	cout << endl;
+	memcpy(data, packetData, wpd->size);
+//	for (int i=0; i< wpd->size; i++, packetData++) {
+//		cout << isprint(packetData[i]) << ",";
+//		cout << static_cast<unsigned>(packetData[i]) << endl;
+//		data[i] = packetData[i];
+//	}
+//	cout << endl;
+
 //	cout << "sizeof(char): " << sizeof(char) << ", sizeof(char*): " << sizeof(char*) << ", sizeof(unsigned char): " << sizeof(unsigned char) << ", sizeof(unsigned char*): " << sizeof(unsigned char*) << endl;
 
 	wpd->data = data;
@@ -510,7 +496,7 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 
 	if (_isMasterMode) {
 		cout << "start running test..." << endl;
-		WrappedPacketData* wpd = createWPD(q);	//prepareTest1();
+		WrappedPacketData* wpd = createWPD(q);
 		sendToLogger(wpd);
 
 		if (wpd != NULL) {

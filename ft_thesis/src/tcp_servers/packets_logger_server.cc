@@ -33,7 +33,7 @@ typedef struct SinglePacketVersionData {
     uint8_t version;
 	uint16_t offset;
     uint16_t size;
-    char* data;
+    unsigned char* data;
 } SinglePacketData;
 
 
@@ -66,7 +66,7 @@ private:
 	bool processGetPacketByIdRequest(void* obj, char* retVal, int* retValLen);
 	bool processReplayRequest(void* obj, char* retVal, int* retValLen);
 
-	bool getPacket(uint64_t packId, char* retVal, int* retValLen);
+	bool getPacket(uint64_t packId, unsigned char* retVal, int* retValLen);
 	int connectTodestMb(char* mbAddress, int mbPort);
 	bool sendMsgToDstMb(int destMbSockfd, char* msgToSend, int length);
 
@@ -96,12 +96,16 @@ void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, 
 	wpd->size = *p;
 	p++;
 
-	char* data = new char[wpd->size];
+	unsigned char* packetData = (unsigned char*) p;
+	unsigned char* data = new unsigned char[wpd->size];
+	memcpy(data, packetData, wpd->size);
+	/*
 	char *r = (char*)p;
 
 	for (int i=0; i< wpd->size; i++, r++) {
 		data[i] = *r;
 	}
+	*/
 
 	wpd->data = data;
 	return (void*)wpd;
@@ -188,7 +192,7 @@ bool PacketLoggerServer::processGetPacketByIdRequest(void* obj, char* retVal, in
 	packId = *p;
 
 	cout << "packId: " << packId << endl;
-	getPacket(packId, retVal, retValLen);
+	getPacket(packId, (unsigned char*)retVal, retValLen);
 
 	cout << "packet is: " << retVal << endl;
 
@@ -214,7 +218,7 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 //	}
 	cout << "address : " << address << endl;
 
-	char packet[SERVER_BUFFER_SIZE];
+	unsigned char packet[SERVER_BUFFER_SIZE];
 	int packetLen;
 
 	for (int i=0; i<packetsToReplay->size(); i++) {
@@ -237,7 +241,7 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 		if (getPacket(packId, packet, &packetLen)) {
 			if (packetLen > 0) {
 				cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl;
-				sendMsgToDstMb(destMbSockfd, packet, packetLen);
+				sendMsgToDstMb(destMbSockfd, (char*)packet, packetLen);
 			}
 		}
 
@@ -268,7 +272,7 @@ bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, in
 	return false;
 }
 
-bool PacketLoggerServer::getPacket(uint64_t packId, char* retVal, int* retValLen) {
+bool PacketLoggerServer::getPacket(uint64_t packId, unsigned char* retVal, int* retValLen) {
 	cout << "PacketLoggerServer::getPacket" << endl;
 	cout << "retVal location: " << &(*retVal) << endl;
 	PacketVersionsData* packetVersions = NULL;
@@ -303,7 +307,14 @@ bool PacketLoggerServer::getPacket(uint64_t packId, char* retVal, int* retValLen
 
 	// sorting the vector according to the version number
 	// todo basically this step is not necessary because the version order is kept.
-//	sort(pvd.begin(), pvd.end(), spvdComparator);
+	sort(pvd.begin(), pvd.end(), spvdComparator);
+
+	// todo for debug usage
+//	SinglePacketVersionData* spvd = pvd[0];
+//	memcpy(retVal+(int)spvd->offset, spvd->data, (int)spvd->size);
+//	*retValLen = max(*retValLen, (int)spvd->size);
+	// end debug
+
 
 	for (uint8_t i=0; i<packetVersionsLen; i++) {
 		cout << "in" << endl;
@@ -312,6 +323,7 @@ bool PacketLoggerServer::getPacket(uint64_t packId, char* retVal, int* retValLen
 		memcpy(retVal+(int)spvd->offset, spvd->data, (int)spvd->size);
 		*retValLen = max(*retValLen, (int)spvd->size);
 	}
+
 
 	return true;
 }
@@ -327,12 +339,15 @@ void PacketLoggerServer::addPacketVersion(PacketVersionsData* packetVersions, Wr
 
 	// copy data content
 	uint16_t size = wpd->size;
-	char* data = new char[size];	// todo I don't free this memory
+	unsigned char* data = new unsigned char[size];	// todo I don't free this memory
+	memcpy(data, wpd->data, size);
+	/*
 	memset(data, 0, size);
 
 	for (int i=0; i< size; i++) {
 		data[i] = wpd->data[i];
 	}
+	*/
 
 	singlePacketData->data = data;
 

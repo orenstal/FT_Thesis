@@ -142,7 +142,7 @@ bool Manager::recover(uint16_t masterMbId) {
 
 	uint16_t slaveMbId = slaveData->mbId;
 	vector<uint64_t>* slaveProcessedPacketIds = Manager::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId);
-
+//	vector<uint64_t>* slaveProcessedPacketIds = new vector<uint64_t>;
 	vector<uint64_t>* unporcessedPacketIds = getUnprocessedPacketIds(masterProcessedPacketIds, slaveProcessedPacketIds);
 
 	ReplayPackets* replayPackets = createReplayPackets(slaveData, unporcessedPacketIds);
@@ -462,6 +462,9 @@ void Manager::runTests(char* address) {
 	Manager *manager = new Manager();
 	manager->init();
 	manager->recover(1);
+	printf("press ctrl+c to exit\n");
+	fflush(stdout);
+	while(1){}
 }
 
 void setAddress(int argc, char *argv[], char* address) {

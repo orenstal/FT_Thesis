@@ -77,11 +77,17 @@ public:
 };
 
 void DetLoggerClient::serializePalsManagerObject(int command, void* obj, char* serialized, int* len) {
-	cout << "DetLoggerClient::serializePalsManagerObject" << endl;
+	cout << "[DetLoggerClient::serializePalsManagerObject] Start" << endl;
 	PALSManager* pm = (PALSManager*)obj;
 
 	cout << "start serializing det_logger client" << endl;
+	cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
+	cout << ", packid: " << pm->getPacketId() << endl;
+	cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
+	cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
+
 	PALSManager::serialize(pm, serialized, len);
+	cout << "[DetLoggerClient::serializePalsManagerObject] End" << endl;
 }
 
 void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
@@ -197,7 +203,7 @@ int DistributePacketRecords::connectToServer(int port, char* address) {
 
 
 void DistributePacketRecords::sendToLogger(void* pm) {
-	cout << "DistributePacketRecords::runTest" << endl;
+	cout << "DistributePacketRecords::sendToLogger" << endl;
 
 	if (pm == NULL) {
 		cout << "ERROR: pm is null" << endl;
@@ -207,8 +213,7 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 
-	detLoggerClient->prepareToSend((void*)pm, serialized, &len, STORE_COMMAND_TYPE);
-
+	detLoggerClient->prepareToSend(pm, serialized, &len, STORE_COMMAND_TYPE);
 	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
@@ -249,8 +254,11 @@ DistributePacketRecords::smactionSlave(Packet *p)
 	cout << "Slave mode - sending only data to 'progress logger'" << endl;
 
 	PALSManager* pm = new PALSManager (_mbId, PACKID_ANNO(p));
+	pm->setGPalSize(0);
+	pm->setSPalSize(0);
 
-	sendToLogger(pm);
+
+	sendToLogger((void*)pm); //static_cast<void*>(&pm)
 	delete pm;
 	cout << "done distribution.." << endl;
 
