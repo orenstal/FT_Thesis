@@ -4,7 +4,7 @@ classifier   :: Classifier(12/8100 /* 802.1Q packets */, -);
 ipClassifier :: Classifier(12/0800 /* IP packets */, -);
 //tcpClassifier :: IPClassifier(10.0.0.0/24 and tcp, -);
 out          :: Queue -> ToDevice("h6-eth0");
-pp           :: preparePacket(true);
+pp           :: preparePacket();
 ivn          :: increaseVersionNumber(true, false);
 dpr         :: distributePacketRecords(1, true)	/*this element should be the last one before out or discard elements!!*/
 
