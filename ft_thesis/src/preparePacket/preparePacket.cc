@@ -5,7 +5,10 @@
  *      Author: Tal
  */
 
+
 #include <click/config.h>
+#include "client.hh"
+#include "distributePacketRecords.hh"
 #include <click/etheraddress.hh>
 #include <click/args.hh>
 #include <click/straccum.hh>
@@ -13,7 +16,22 @@
 #include <click/packet_anno.hh>
 #include <click/glue.hh>
 #include <clicknet/ether.h>
-#include <click/packet_anno.hh>
+//#include <clicknet/ip.h>
+//#include <clicknet/udp.h>
+//#include <clicknet/tcp.h>
+
+#include <pthread.h>
+#include <netinet/in.h>
+#include <iostream>
+#include<sys/socket.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 
 #include <iostream>
@@ -22,11 +40,104 @@
 #include "preparePacket.hh"
 #include "../common/pal_api/pals_manager.hh"
 
+#define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
+#define MASTER_MB_ID 1
+
 using namespace std;
 CLICK_DECLS
 
 enum { H_MB_STATE_CALL, H_RECOVERY_MODE_CALL, H_TO_MASTER_CALL, H_ENFORCE_TO_MASTER_CALL };
 enum { MASTER, RECOVERING, SLAVE, ERROR };
+
+class DetLoggerPPClient : public Client {
+
+private:
+	void serializePalsManagerObject(int command, void* obj, char* serialized, int* len);
+	void serializeGetPalsByMBIdAndPackId(int command, void* obj, char* serialized, int* len);
+	void handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen, void* retValAsObj);
+
+protected:
+	void serializeObject(int command, void* obj, char* serialized, int* len);
+	void handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj);
+
+public:
+	DetLoggerPPClient(int port, char* address) : Client(port, address) {
+		// do nothing
+	}
+};
+
+void DetLoggerPPClient::serializePalsManagerObject(int command, void* obj, char* serialized, int* len) {
+	cout << "[DetLoggerPPClient::serializePalsManagerObject] Start" << endl;
+	PALSManager* pm = (PALSManager*)obj;
+
+	cout << "start serializing det_logger client" << endl;
+	cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
+	cout << ", packid: " << pm->getPacketId() << endl;
+	cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
+	cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
+
+	PALSManager::serialize(pm, serialized, len);
+	cout << "[DetLoggerPPClient::serializePalsManagerObject] End" << endl;
+}
+
+void DetLoggerPPClient::serializeGetPalsByMBIdAndPackId(int command, void* obj, char* serialized, int* len) {
+	uint16_t* mbIdInput = (uint16_t*)obj;
+	uint16_t *q = (uint16_t*)serialized;
+	*q = *mbIdInput;
+	q++;
+	mbIdInput++;
+
+	uint64_t *packIdInput = (uint64_t*)mbIdInput;
+	uint64_t *p = (uint64_t*)q;
+	*p = *packIdInput;
+	*len = sizeof(uint16_t) + sizeof(uint64_t);
+}
+
+void DetLoggerPPClient::serializeObject(int command, void* obj, char* serialized, int* len) {
+	cout << "DetLoggerPPClient::serializeObject" << endl;
+
+//	if (command == STORE_COMMAND_TYPE) {
+//		serializePalsManagerObject(command, obj, serialized, len);
+//	}
+
+	if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		serializeGetPalsByMBIdAndPackId(command, obj, serialized, len);
+	}
+}
+
+void DetLoggerPPClient::handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen, void* retValAsObj) {
+	cout << "DetLoggerPPClient::handleGetPalsByMBIdAndPackIdResponse" << endl;
+//	cout << "retValLen: " << retValLen << endl;
+	PALSManager* pm = static_cast<PALSManager*>(retValAsObj);
+//	cout << "2" << endl;
+
+//	cout << "pm == null? " << (pm == NULL) << endl;
+
+	if (pm == NULL) {
+		cout << "ERROR: pm can't be null!!" << endl;
+		return;
+	}
+
+	PALSManager::deserialize(retVal, pm);
+//	cout << "3" << endl;
+
+	pm->printContent();
+	*((PALSManager*)retValAsObj) = *pm;
+	cout << "[DetLoggerPPClient::handleGetPalsByMBIdAndPackIdResponse] done" << endl;
+}
+
+void DetLoggerPPClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
+	cout << "DetLoggerPPClient::handleReturnValue" << endl;
+
+//	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+//		cout << "nothing to handle." << endl;
+//	}
+
+	if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		handleGetPalsByMBIdAndPackIdResponse(command, retVal, len, retValAsObj);
+	}
+}
+
 
 PreparePacket::PreparePacket()
 {
@@ -55,6 +166,13 @@ PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
 		_mbState = SLAVE;
 	}
 	cout << "isMaster mode? " << isMasterMode << endl;
+
+	if (isSlave()) {
+		cout << "[slave mode] connecting to det logger" << endl;
+		detLoggerClient = new DetLoggerPPClient(9095, "10.0.0.5");
+		detLoggerClient->connectToServer();
+	}
+
     return 0;
 }
 
@@ -86,6 +204,42 @@ PreparePacket::extractVlanByLevel(Packet *p, uint8_t level)
     }
 }
 
+void* PreparePacket::prepareGetPalsByMBIdAndPackId(uint16_t mbId, uint64_t packId) {
+	cout << "preparing get pals request for mbId: " << mbId << ", packId: " << packId << endl;
+
+	char* input = new char[sizeof(uint16_t)+sizeof(uint64_t)+1];
+	uint16_t* mbIdInput = (uint16_t*)input;
+	*mbIdInput = mbId;
+	mbIdInput++;
+
+	uint64_t* packIdInput = (uint64_t*)mbIdInput;
+	*packIdInput = packId;
+
+	return (void*)input;
+}
+
+void* PreparePacket::getPals(uint64_t packId) {
+
+	char serialized[SERVER_BUFFER_SIZE];
+	int len;
+	PALSManager* pm = new PALSManager();
+	void* inputs = prepareGetPalsByMBIdAndPackId(MASTER_MB_ID, packId);
+	detLoggerClient->prepareToSend(inputs, serialized, &len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE);
+	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE, static_cast<void*>(pm));
+
+	if (isSucceed) {
+		cout << "succeed to send" << endl;
+	} else {
+		cout << "failed to send" << endl;
+	}
+
+//	cout << "1" << endl;
+//	pm->printContent();
+//	cout << "done" << endl;
+
+	delete (char*)inputs;
+	return (void*)pm;
+}
 
 
 Packet *
@@ -107,19 +261,32 @@ PreparePacket::smaction(Packet *p)	// main logic
 	SET_PACKID_ANNO(p, unifiedId);
 	cout << "set packet id was completed. getAnno is: " << PACKID_ANNO(p) << endl;
 
-	PALSManager* pm = new PALSManager();
 
-	//test
-	pm->createGPalAndAdd(1, "test\0");
+	PALSManager* pm;
+
+	if (isMaster()) {
+		cout << "[master mode] create dummy pal" << endl;
+		pm = new PALSManager();
+
+		//test
+		pm->createGPalAndAdd(1, "test\0");
+
+		gpal* newGPalsList = pm->getGPalList();
+		int test = newGPalsList[0].var_id;
+		cout << "gpal var id: " << test << "." << endl;
+		char* text = newGPalsList[0].val;
+		cout << "gpal val is: " << text << endl;
+		cout << "done master mode" << endl;
+	} else if (isSlave()) {
+		cout << "[slave mode] start getting pals for mbId: " << MASTER_MB_ID << ", packId: " << unifiedId << endl;
+		pm = (PALSManager*)getPals(unifiedId);
+		cout << "now pm is:" << endl;
+		pm->printContent();
+		cout << "done slave mode" << endl;
+	}
 
 	SET_PALS_MANAGER_REFERENCE_ANNO(p, (uintptr_t)pm);
 	cout << "set pals_manager was completed." << endl;
-
-	gpal* newGPalsList = pm->getGPalList();
-	int test = newGPalsList[0].var_id;
-	cout << "gpal var id: " << test << "." << endl;
-	char* text = newGPalsList[0].val;
-	cout << "gpal val is: " << text << endl;
 
 
 	return p;
@@ -171,6 +338,10 @@ void PreparePacket::doChangeModeToMaster() {
 
 bool PreparePacket::isMaster() {
 	return (_mbState == MASTER);
+}
+
+bool PreparePacket::isSlave() {
+	return (_mbState == SLAVE);
 }
 
 
@@ -229,4 +400,5 @@ PreparePacket::add_handlers()
 
 
 CLICK_ENDDECLS
+ELEMENT_REQUIRES(TCPClient)
 EXPORT_ELEMENT(PreparePacket PreparePacket-PreparePacket)

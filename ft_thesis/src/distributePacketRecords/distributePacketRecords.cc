@@ -241,7 +241,6 @@ DistributePacketRecords::smactionMaster(Packet *p)
 
 
 	sendToLogger(pm);
-	// todo: notify slave !!
 	delete pm;
 	cout << "done distribution.." << endl;
 

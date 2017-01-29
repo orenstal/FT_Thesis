@@ -6,7 +6,9 @@ ipClassifier :: Classifier(12/0800 /* IP packets */, -);
 out          :: Queue -> ToDevice("h6-eth0");
 pp           :: preparePacket();
 ivn          :: increaseVersionNumber(true, false);
-dpr         :: distributePacketRecords(1, true)	/*this element should be the last one before out or discard elements!!*/
+dpr          :: distributePacketRecords(1, true)	/*this element should be the last one before out or discard elements!!*/
+pp1          :: preparePacket();
+dpr1         :: distributePacketRecords(1, true);
 
 FromDevice("h6-eth0")
 	-> classifier
@@ -17,9 +19,14 @@ FromDevice("h6-eth0")
 	-> Unstrip(16)
 	-> pp
 	-> Print()
-	-> ivn
+//	-> ivn
+//	-> ToDump('~/click/h6.txt')
 	-> dpr	/*this element should be the last one before out or discard elements!!*/
+	-> pp1
+	-> ivn
+	-> dpr1
 //	-> setIdAnno
+//	-> ToDump("~/click/h6.txt")
 	-> out;
 
 classifier[1] -> out;

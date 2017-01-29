@@ -9,6 +9,14 @@
 #define PREPAREPACKET_PREPAREPACKET_HH_
 
 #include <click/element.hh>
+#include <click/packet_anno.hh>
+
+//#include "../common/pal_api/pals_manager.hh"
+
+#include <stdio.h>
+#include <string.h>
+#include "client.hh"
+
 CLICK_DECLS
 class PreparePacket : public Element {
 
@@ -34,12 +42,18 @@ public:
 	bool changeModeToMaster();
 	void doChangeModeToMaster();
 	bool isMaster();
+	bool isSlave();
+
+	void* getPals(uint64_t packId);
 
 private:
 	uint16_t _mbId;
 	int _mbState;
+	Client *detLoggerClient;
 //	bool _isMasterMode;
 //	bool _recover;
+
+	void* prepareGetPalsByMBIdAndPackId(uint16_t mbId, uint64_t packId);
 
 	static String read_handler(Element *e, void *user_data) CLICK_COLD;
 	static int write_handler(const String &str, Element *e, void *user_data, ErrorHandler *errh) CLICK_COLD;

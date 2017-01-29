@@ -6,12 +6,19 @@
  */
 
 #include "../common/pal_api/pals_manager.hh"
+#include "../tcp_clients/packets_logger_client.hh";
+#include "../common/replayPackets/replay_packets.hh"
 #include "server.hh"
 #include <map>
 #include <vector>
 
 #define PORT 9095	// port to listening on
 #define GPAL_VAL_SIZE 50
+
+#define SLAVE_ADDRESS "10.0.0.7"
+#define SLAVE_ADDRESS_LEN 8
+#define SLAVE_PORT 9999
+#define SLAVE_ID 2
 
 #define STORE_COMMAND_TYPE 0
 #define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
@@ -48,6 +55,7 @@ class DetLoggerServer : public Server {
 private:
 	detDataMap detData;
 	map<uint16_t, ServerProgressData* > progressData;
+	PacketLoggerClient *packetLoggerClient; // todo - is required ??
 
 	// progress data
 	ServerProgressData* getOrCreateServerProgressData(uint16_t mbId);
@@ -66,6 +74,10 @@ private:
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 	bool processGetProcessedPacketsRequest(void* obj, char* retVal, int* retValLen);
 	bool processGetPalsRequest(void* obj, char* retVal, int* retValLen);
+
+	// send packet to slave (mb2) todo - is required ??
+	ReplayPackets* createGenericMB2ReplayPacket();
+	void sendReplayPacketRequest(ReplayPackets* replayPacketsData);
 
 protected:
 	void* deserializeClientRequest(int command, char* msg, int msgLen);
@@ -317,6 +329,41 @@ ServerProgressData* DetLoggerServer::getServerProgressData(uint16_t mbId) {
 	return NULL;
 }
 
+ReplayPackets* DetLoggerServer::createGenericMB2ReplayPacket() {
+	printf("[DetLoggerServer::createReplayPacket] Start\n");
+	ReplayPackets* replayPackets = new ReplayPackets;
+	replayPackets->mbId = SLAVE_ID;
+	replayPackets->port = SLAVE_PORT;
+	replayPackets->addressLen = SLAVE_ADDRESS_LEN;
+	memset(replayPackets->address, '\0', MAX_ADDRESS_LEN);
+	memcpy(replayPackets->address, SLAVE_ADDRESS, replayPackets->addressLen);
+
+	printf("replayPackets->mbId: %d, port: %d, addressLen: %d\n", replayPackets->mbId, replayPackets->port, replayPackets->addressLen);
+	printf("[DetLoggerServer::createReplayPacket] End\n");
+	fflush(stdout);
+
+	return replayPackets;
+}
+
+
+void DetLoggerServer::sendReplayPacketRequest(ReplayPackets* replayPacketsData) {
+	printf("[DetLoggerServer::sendReplayPacketRequest] Start\n");
+
+	char serialized[SERVER_BUFFER_SIZE];
+	int len;
+	char* retValAsObj = NULL;
+//	void* msgToSend = (void*)replayPacketsData;
+
+	packetLoggerClient->prepareToSend((void*)replayPacketsData, serialized, &len, REPLAY_PACKETS_BY_IDS_COMMAND_TYPE);
+	bool isSucceed = packetLoggerClient->sendMsgAndWait(serialized, len, REPLAY_PACKETS_BY_IDS_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
+
+	if (isSucceed) {
+		cout << "succeed to send" << endl;
+	} else {
+		cout << "failed to send" << endl;
+	}
+	printf("[DetLoggerServer::sendReplayPacketRequest] End\n");
+}
 
 
 void DetLoggerServer::printState() {
