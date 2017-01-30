@@ -23,6 +23,19 @@ void DetLoggerClient::serializeGetPalsByMBIdAndPackId(int command, void* obj, ch
 	*len = sizeof(uint16_t) + sizeof(uint64_t);
 }
 
+void DetLoggerClient::serializeDeleteFirstPackets(int command, void* obj, char* serialized, int* len) {
+	uint16_t* mbIdInput = (uint16_t*)obj;
+	uint16_t *q = (uint16_t*)serialized;
+	*q = *mbIdInput;
+	q++;
+	mbIdInput++;
+
+	uint32_t *totalPacketsToBeRemovedInput = (uint32_t*)mbIdInput;
+	uint32_t *p = (uint32_t*)q;
+	*p = *totalPacketsToBeRemovedInput;
+	*len = sizeof(uint16_t) + sizeof(uint32_t);
+}
+
 void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
 	cout << "DetLoggerClient::serializeObject" << endl;
 
@@ -34,6 +47,8 @@ void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, 
 		*len = sizeof(uint16_t);
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
 		serializeGetPalsByMBIdAndPackId(command, obj, serialized, len);
+	} else if (command == DELETE_PACKETS_COMMAND_TYPE) {
+		serializeDeleteFirstPackets(command, obj, serialized, len);
 	}
 }
 
@@ -70,7 +85,7 @@ void DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse(int command, char* re
 void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
 	cout << "DetLoggerClient::handleReturnValue" << endl;
 
-	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
+	if (status == 0 || command == STORE_COMMAND_TYPE  || command == DELETE_PACKETS_COMMAND_TYPE || len <= 0) {
 		cout << "nothing to handle." << endl;
 	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
 		handleGetPacketIdsResponse(command, retVal, len, retValAsObj);

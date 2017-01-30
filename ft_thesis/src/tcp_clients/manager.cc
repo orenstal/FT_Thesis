@@ -46,6 +46,7 @@
 #define STORE_COMMAND_TYPE 0
 #define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
 #define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
+#define DELETE_PACKETS_COMMAND_TYPE 3
 
 #define DET_LOGGER_SERVER_PORT 9095
 #define DET_LOGGER_SERVER_ADDRESS "10.0.0.5" // "127.0.0.1"
@@ -80,6 +81,10 @@ private:
 
 	static vector<uint64_t>* getUnprocessedPacketIds(
 	vector<uint64_t>* masterProcessedPacketIds, vector<uint64_t>* slaveProcessedPacketIds);
+
+	static vector<uint64_t>* getCommonProcessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
+	vector<uint64_t>* slaveProcessedPacketIds);
+
 	ReplayPackets* createReplayPackets(MbData* slaveData, vector<uint64_t>* unporcessedPacketIds);
 	void sendReplayPacketsRequest(PacketLoggerClient *client, ReplayPackets* replayPacketsData);
 //	void serializeReplayPacketsObj(ReplayPackets* replayData, char* serialized, int* len);
@@ -87,12 +92,16 @@ private:
 	int connectToPacketLoggerServer(char* mbAddress, int mbPort);
 	bool sendMsgToDstMb(int destMbSockfd, char* msgToSend, int length); // todo to be removed
 
+	void deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, uint32_t totalFirstPacketsToBeDeleted);
+
 public:
 	Manager();
 	void init();
-	bool recover(uint16_t masterMbId);
+	bool replay(uint16_t masterMbId);
+	bool clearReplayedPackets(uint16_t masterMbId);
 
-	static void runTests(char* address);
+	static void runReplayTest(Manager *manager);
+	static void runClearTest(Manager *manager);
 };
 
 Manager::Manager()
@@ -119,15 +128,13 @@ void Manager::init() {
 
 }
 
-bool Manager::recover(uint16_t masterMbId) {
-	printf("[Manager::recover] Start\n");
-//	cout << "Manager::recover" << endl;
+bool Manager::replay(uint16_t masterMbId) {
+	printf("[Manager::replay] Start\n");
 
 	MbData* slaveData = getSlaveMbData(masterMbId);
 
 	if (slaveData == NULL) {
 		printf("ERROR: failed to get slave mb data\n");
-//		cout << "ERROR: failed to get slave mb data" << endl;
 		return false;
 	}
 
@@ -139,6 +146,7 @@ bool Manager::recover(uint16_t masterMbId) {
 	connectToServersForRecovery(detLoggerClient, slaveDetLoggerClient, packetLoggerClient);
 
 	vector<uint64_t>* masterProcessedPacketIds = Manager::getProcessedPacketIds(detLoggerClient, &masterMbId);
+	uint32_t numOfFirstPacketsToBeReplayed = masterProcessedPacketIds->size();
 
 	uint16_t slaveMbId = slaveData->mbId;
 	vector<uint64_t>* slaveProcessedPacketIds = Manager::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId);
@@ -150,26 +158,41 @@ bool Manager::recover(uint16_t masterMbId) {
 	printf("about to delete replayPackets\n");
 	delete replayPackets;
 
-//	char* serialized = new char[5096];
-//	int len;
-//	char* retValAsObj = NULL;
-//	serializeReplayPacketsObj(replayPackets, serialized, &len); //
+	printf("[Manager::replay] End\n");
 
-	/*
-	int packetLoggerServerSockfd = connectToPacketLoggerServer(PACKET_LOGGER_SERVER_ADDRESS, PACKET_LOGGER_SERVER_PORT);
+	return true;
+}
 
-	if (packetLoggerServerSockfd == -1) {
-		printf("ERROR: failed to connect dest mb\n");
-//		cout << "ERROR: failed to connect dest mb" << endl;
+
+bool Manager::clearReplayedPackets(uint16_t masterMbId) {
+	printf("[Manager::clearReplayedPackets] Start\n");
+
+	MbData* slaveData = getSlaveMbData(masterMbId);
+
+	if (slaveData == NULL) {
+		printf("ERROR: failed to get slave mb data\n");
+		return false;
 	}
 
-	sendMsgToDstMb(packetLoggerServerSockfd, serialized, len);
-	close(packetLoggerServerSockfd);
-	*/
+	printf("slaveData id is: %" PRIu16 ", address is: %s, port is: %d\n", slaveData->mbId, slaveData->ipAddress, slaveData->port);
 
-//	packetLoggerClient->sendMsg(serialized, len);
-//	packetLoggerClient->sendMsgAndWait(serialized, len, REPLAY_PACKETS_BY_IDS_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
-	printf("[Manager::recover] End\n");
+	DetLoggerClient *detLoggerClient = new DetLoggerClient(DET_LOGGER_SERVER_PORT, DET_LOGGER_SERVER_ADDRESS);
+	DetLoggerClient *slaveDetLoggerClient = new DetLoggerClient(DET_LOGGER_SERVER_PORT, DET_LOGGER_SLAVE_SERVER_ADDRESS);
+	connectToServersForRecovery(detLoggerClient, slaveDetLoggerClient, NULL);
+
+	vector<uint64_t>* masterProcessedPacketIds = Manager::getProcessedPacketIds(detLoggerClient, &masterMbId);
+
+	uint16_t slaveMbId = slaveData->mbId;
+	vector<uint64_t>* slaveProcessedPacketIds = Manager::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId);
+//	vector<uint64_t>* slaveProcessedPacketIds = new vector<uint64_t>;
+	vector<uint64_t>* commonPorcessedPacketIds = getCommonProcessedPacketIds(masterProcessedPacketIds, slaveProcessedPacketIds);
+
+	deleteFirstPacketsRequest(detLoggerClient, masterMbId, commonPorcessedPacketIds->size());
+	deleteFirstPacketsRequest(slaveDetLoggerClient, slaveMbId, commonPorcessedPacketIds->size());
+
+	printf("[Manager::clearReplayedPackets] End\n");
+
+	return true;
 }
 
 
@@ -394,6 +417,31 @@ vector<uint64_t>* Manager::getUnprocessedPacketIds(vector<uint64_t>* masterProce
 	return masterProcessedPacketIds;
 }
 
+vector<uint64_t>* Manager::getCommonProcessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
+		vector<uint64_t>* slaveProcessedPacketIds) {
+	printf("[Manager::getCommonProcessedPacketIds] Start\n");
+
+	vector<uint64_t>::iterator masterIter = masterProcessedPacketIds->begin();
+	vector<uint64_t>::iterator slaveIter = slaveProcessedPacketIds->begin();
+
+	while (masterIter != masterProcessedPacketIds->end() &&
+			slaveIter != slaveProcessedPacketIds->end()) {
+
+		if (*masterIter != *slaveIter) {
+			masterIter = masterProcessedPacketIds->erase(masterIter);
+		} else {
+			masterIter++;
+		}
+
+		slaveIter++;
+	}
+
+	printf("returned vector size is: %d\n", masterProcessedPacketIds->size());
+
+	printf("[Manager::getCommonProcessedPacketIds] End\n");
+	return masterProcessedPacketIds;
+}
+
 MbData* Manager::getSlaveMbData(uint16_t masterMbId) {
 	printf("[Manager::getSlaveMbData] Start\n");
 	MbData* slaveData = NULL;
@@ -422,7 +470,10 @@ void Manager::connectToServersForRecovery(DetLoggerClient *detLoggerClient, DetL
 
 	detLoggerClient->connectToServer();
 	slaveDetLoggerClient->connectToServer();
-	packetLoggerClient->connectToServer();
+
+	if (packetLoggerClient != NULL) {
+		packetLoggerClient->connectToServer();
+	}
 
 	printf("done connecting to servers...\n");
 	//	cout << "done connecting to servers..." << endl;
@@ -458,15 +509,41 @@ vector<uint64_t>* Manager::getProcessedPacketIds(DetLoggerClient *client, uint16
 
 }
 
-void Manager::runTests(char* address) {
-	printf("start recovering mb 1\n");
+void Manager::deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, uint32_t totalFirstPacketsToBeDeleted) {
+	printf("[Manager::deleteFirstPacketsRequest] Start\n");
+	printf("mbId: %" PRIu16 "\n", mbId);
+	printf("totalFirstPacketsToBeDeleted: %" PRIu32 "\n", totalFirstPacketsToBeDeleted);
+	char serialized[SERVER_BUFFER_SIZE];
+	int len;
 
-	Manager *manager = new Manager();
-	manager->init();
-	manager->recover(1);
-	printf("press ctrl+c to exit\n");
-	fflush(stdout);
-	while(1){}
+	char input[sizeof(uint16_t) + sizeof(uint32_t)];
+	uint16_t* mbIdInput = (uint16_t*)input;
+	*mbIdInput = mbId;
+	mbIdInput++;
+
+	uint32_t* totalPacketsToBeDeletedInput = (uint32_t*)mbIdInput;
+	*totalPacketsToBeDeletedInput = totalFirstPacketsToBeDeleted;
+
+	client->prepareToSend((void*)input, serialized, &len, DELETE_PACKETS_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, DELETE_PACKETS_COMMAND_TYPE, NULL);
+
+	if (isSucceed) {
+		printf("succeed to send\n");
+	} else {
+		printf("failed to send\n");
+	}
+
+	printf("[Manager::deleteFirstPacketsRequest] End\n");
+}
+
+void Manager::runReplayTest(Manager *manager) {
+	printf("start replaying mb 1\n");
+	manager->replay(1);
+}
+
+void Manager::runClearTest(Manager *manager) {
+	printf("start replaying mb 1\n");
+	manager->clearReplayedPackets(1);
 }
 
 void setAddress(int argc, char *argv[], char* address) {
@@ -497,12 +574,31 @@ int main(int argc, char *argv[])
 	memset(address, '\0', MAX_ADDRESS_LEN);
 	setAddress(argc, argv, address);
 
-	if (*argv[1] == 'm')
-		Manager::runTests(address);
-	else if (*argv[1] == 'd')
+	if (*argv[1] == 'm') {
+
+		Manager *manager = new Manager();
+		manager->init();
+
+		while (true) {
+			cout << "\n--------------------------------" << endl;
+			cout << "Enter 'r' for replay packets, 'c' for clear common packets or 'e' for exit" << endl;
+			string command;
+			getline(cin, command);
+
+			if (command[0] == 'r') {
+				Manager::runReplayTest(manager);
+			} else if (command[0] == 'c') {
+				Manager::runClearTest(manager);
+			} else if (command[0] == 'e') {
+				break;
+			}
+		}
+
+	} else if (*argv[1] == 'd') {
 		DetLoggerClient::runTests(address);
-	else if (*argv[1] == 'p')
+	} else if (*argv[1] == 'p') {
 		PacketLoggerClient::runTests(address);
+	}
 
 	return 0;
 }

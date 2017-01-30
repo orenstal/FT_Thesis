@@ -23,6 +23,7 @@
 #define STORE_COMMAND_TYPE 0
 #define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
 #define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
+#define DELETE_PACKETS_COMMAND_TYPE 3
 
 using namespace std;
 
@@ -55,7 +56,6 @@ class DetLoggerServer : public Server {
 private:
 	detDataMap detData;
 	map<uint16_t, ServerProgressData* > progressData;
-	PacketLoggerClient *packetLoggerClient; // todo - is required ??
 
 	// progress data
 	ServerProgressData* getOrCreateServerProgressData(uint16_t mbId);
@@ -74,10 +74,10 @@ private:
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 	bool processGetProcessedPacketsRequest(void* obj, char* retVal, int* retValLen);
 	bool processGetPalsRequest(void* obj, char* retVal, int* retValLen);
+	bool processDeleteFirstPacketsRequest(void* obj, char* retVal, int* retValLen);
 
-	// send packet to slave (mb2) todo - is required ??
-	ReplayPackets* createGenericMB2ReplayPacket();
-	void sendReplayPacketRequest(ReplayPackets* replayPacketsData);
+	void deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToRemove, ServerProgressData* spd);
+	void deletePacketFromMbData(mbDataMap *mbData, uint64_t packetToRemove);
 
 protected:
 	void* deserializeClientRequest(int command, char* msg, int msgLen);
@@ -98,6 +98,8 @@ void* DetLoggerServer::deserializeClientRequest(int command, char* msg, int msgL
 	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
 		return (void*)msg;
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		return (void*)msg;
+	} else if (command == DELETE_PACKETS_COMMAND_TYPE) {
 		return (void*)msg;
 	}
 
@@ -193,6 +195,80 @@ bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retVal
 	return true;
 }
 
+bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, int* retValLen) {
+	cout << "[DetLoggerServer::processDeletePacketsRequest]" << endl;
+	uint16_t mbId;
+	uint32_t totalPacketsToRemove = 0;	// the number of first packets to be removed
+
+	// extract mbId from client request
+	uint16_t *q = (uint16_t*)obj;
+	mbId = *q;
+	q++;
+
+	uint32_t *tp = (uint32_t*)q;
+	totalPacketsToRemove = *tp;
+	tp++;
+
+	cout << "mbId: " << mbId << ", total packets to delete: " << totalPacketsToRemove << endl;
+
+	ServerProgressData* spd = getServerProgressData(mbId);
+
+	if (spd != NULL) {
+		deleteFirstPackets(mbId, totalPacketsToRemove, spd);
+	}
+
+	cout << "state after deletion:" << endl;
+	printState();
+
+	// ack/nack will be sent anyway.
+	*retValLen = 0;
+
+	return true;
+}
+
+
+
+void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToRemove, ServerProgressData* spd) {
+	cout << "[DetLoggerServer::deleteFirstPackets] Start" << endl;
+	cout << "spd->index before: " << spd->index << endl;
+	mbDataMap *mbData = NULL;
+	if (detData.find(mbId) != detData.end()) {
+		cout << "mbId " << mbId << " exist in detData" << endl;
+		mbData = &(detData[mbId]);
+	}
+
+	for (int i=0; i<totalPacketsToRemove; i++) {
+		uint64_t packetToRemove = spd->packet_ids_vector[i];
+		deletePacketFromMbData(mbData, packetToRemove);
+	}
+
+	for (int i=totalPacketsToRemove; i< spd->index; i++) {
+		spd->packet_ids_vector[i-totalPacketsToRemove] = spd->packet_ids_vector[i];
+	}
+
+	spd->index -= totalPacketsToRemove;
+
+	cout << "spd->index after: " << spd->index << endl;
+	cout << "[DetLoggerServer::deleteFirstPackets] End" << endl;
+}
+
+
+void DetLoggerServer::deletePacketFromMbData(mbDataMap *mbData, uint64_t packetToRemove) {
+	cout << "[DetLoggerServer::deletePacketFromMbData] Start" << endl;
+	if (mbData != NULL) {
+		cout << "1" << endl;
+		cout << "packetToRemove: " << packetToRemove << endl;
+		if (mbData->find(packetToRemove) != mbData->end()) {
+			cout << "packetToRemove: " << packetToRemove << endl;
+			PacketData *packetData = mbData->at(packetToRemove);
+			delete packetData;
+			mbData->erase(packetToRemove);
+		}
+	}
+	cout << "[DetLoggerServer::deletePacketFromMbData] End" << endl;
+}
+
+
 bool DetLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	cout << "command is: " << command << endl;
 
@@ -202,6 +278,8 @@ bool DetLoggerServer::processRequest(void* obj, int command, char* retVal, int* 
 		return processGetProcessedPacketsRequest(obj, retVal, retValLen);
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
 		return processGetPalsRequest(obj, retVal, retValLen);
+	} else if (command == DELETE_PACKETS_COMMAND_TYPE) {
+		return processDeleteFirstPacketsRequest(obj, retVal, retValLen);
 	}
 
 	return false;
@@ -329,42 +407,6 @@ ServerProgressData* DetLoggerServer::getServerProgressData(uint16_t mbId) {
 	return NULL;
 }
 
-ReplayPackets* DetLoggerServer::createGenericMB2ReplayPacket() {
-	printf("[DetLoggerServer::createReplayPacket] Start\n");
-	ReplayPackets* replayPackets = new ReplayPackets;
-	replayPackets->mbId = SLAVE_ID;
-	replayPackets->port = SLAVE_PORT;
-	replayPackets->addressLen = SLAVE_ADDRESS_LEN;
-	memset(replayPackets->address, '\0', MAX_ADDRESS_LEN);
-	memcpy(replayPackets->address, SLAVE_ADDRESS, replayPackets->addressLen);
-
-	printf("replayPackets->mbId: %d, port: %d, addressLen: %d\n", replayPackets->mbId, replayPackets->port, replayPackets->addressLen);
-	printf("[DetLoggerServer::createReplayPacket] End\n");
-	fflush(stdout);
-
-	return replayPackets;
-}
-
-
-void DetLoggerServer::sendReplayPacketRequest(ReplayPackets* replayPacketsData) {
-	printf("[DetLoggerServer::sendReplayPacketRequest] Start\n");
-
-	char serialized[SERVER_BUFFER_SIZE];
-	int len;
-	char* retValAsObj = NULL;
-//	void* msgToSend = (void*)replayPacketsData;
-
-	packetLoggerClient->prepareToSend((void*)replayPacketsData, serialized, &len, REPLAY_PACKETS_BY_IDS_COMMAND_TYPE);
-	bool isSucceed = packetLoggerClient->sendMsgAndWait(serialized, len, REPLAY_PACKETS_BY_IDS_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
-
-	if (isSucceed) {
-		cout << "succeed to send" << endl;
-	} else {
-		cout << "failed to send" << endl;
-	}
-	printf("[DetLoggerServer::sendReplayPacketRequest] End\n");
-}
-
 
 void DetLoggerServer::printState() {
 	cout << "-------------------------------------" << endl;
@@ -426,6 +468,8 @@ void DetLoggerServer::freeDeserializedObject(void* obj, int command) {
 	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
 		// do nothing
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
+		// do nothing
+	} else if (command == DELETE_PACKETS_COMMAND_TYPE) {
 		// do nothing
 	}
 }

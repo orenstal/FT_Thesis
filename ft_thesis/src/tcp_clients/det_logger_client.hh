@@ -21,6 +21,7 @@
 #define STORE_COMMAND_TYPE 0
 #define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
 #define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
+#define DELETE_PACKETS_COMMAND_TYPE 3
 
 using namespace std;
 
@@ -29,6 +30,7 @@ class DetLoggerClient : public Client {
 private:
 	void serializePalsManagerObject(int command, void* obj, char* serialized, int* len);
 	void serializeGetPalsByMBIdAndPackId(int command, void* obj, char* serialized, int* len);
+	void serializeDeleteFirstPackets(int command, void* obj, char* serialized, int* len);
 	void handleGetPacketIdsResponse(int command, char* retVal, int len, void* retValAsObj);
 	void handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen, void* retValAsObj);
 
