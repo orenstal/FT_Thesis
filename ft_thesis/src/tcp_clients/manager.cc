@@ -379,7 +379,7 @@ vector<uint64_t>* Manager::getUnprocessedPacketIds(vector<uint64_t>* masterProce
 	while (masterIter != masterProcessedPacketIds->end() &&
 			slaveIter != slaveProcessedPacketIds->end()) {
 
-		if (masterIter == slaveIter) {
+		if (*masterIter == *slaveIter) {
 			masterIter = masterProcessedPacketIds->erase(masterIter);
 		} else {
 			masterIter++;
@@ -387,6 +387,8 @@ vector<uint64_t>* Manager::getUnprocessedPacketIds(vector<uint64_t>* masterProce
 
 		slaveIter++;
 	}
+
+	printf("returned vector size is: %d\n", masterProcessedPacketIds->size());
 
 	printf("[Manager::getUnprocessedPacketIds] End\n");
 	return masterProcessedPacketIds;
