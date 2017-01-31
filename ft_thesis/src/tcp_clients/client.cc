@@ -5,7 +5,6 @@
  *      Author: Tal
  */
 
-
 #include "client.hh"
 
 using namespace std;
@@ -24,18 +23,20 @@ Client::Client(int port, char* address) {
 	memset(&(sock_addr_server.sin_zero), '\0', 8);
 
 	sockfd = -1;
+
+	printf("is debug Mode?\n");
+	#ifdef DEBUG
+	printf("Yes\n");
+	#else
+	printf("No\n");
+	#endif
 }
 
 void Client::connectToServer() {
-	//Create socket
 	sockfd = socket(AF_INET , SOCK_STREAM , 0);
 	if (sockfd == -1) {
-//		cout << "ERROR: Could not create socket" << endl;
 		printf("ERROR: Could not create socket\n");
 	}
-
-	printf("Socket created\n");
-//	cout << "Socket created" << endl;
 
 	// activate keep-alive mechanism
 //	int val = 1;
@@ -43,7 +44,6 @@ void Client::connectToServer() {
 
 	//Connect to remote server
 	if (connect(sockfd , (struct sockaddr *)&sock_addr_server , sizeof(sock_addr_server)) < 0) {
-//		click << "ERROR: Connect failed." << endl;
 		printf("ERROR: Connect failed.\n");
 		return;
 	}
@@ -52,12 +52,11 @@ void Client::connectToServer() {
 }
 
 void Client::serializeObject(int command, void* obj, char* serialized, int* len) {
-	printf("Client::serializeObject\n");
-	//	cout << "Client::serializeObject" << endl;
+	DEBUG_STDOUT(printf("Client::serializeObject\n"));
 }
 
 void Client::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
-	printf("Client::handleReturnValue\n");
+	DEBUG_STDOUT(printf("Client::handleReturnValue\n"));
 }
 
 /*
@@ -70,69 +69,63 @@ void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 }
 
 void Client::prepareToSend(void* obj, char* serialized, int* len, int command) {
-	printf("Client::prepareToSend\n");
+	DEBUG_STDOUT(printf("Client::prepareToSend\n"));
 	// we leave NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX (7) digits for the serialization length
 	serializeObject(command, obj, serialized + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, len);
-	printf("Client::done serializing\n");
+	DEBUG_STDOUT(printf("Client::done serializing\n"));
 
 	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
 	intToStringDigits(*len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, numAsStr);
 
-	printf("numAsStr is: %s\n", numAsStr);
-//	cout << "lenPrefix is: " << lenPrefix << endl;
-	printf("len is: %d\n", *len);
+	DEBUG_STDOUT(printf("len is: %d\n", *len));
 
 	for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
-		printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
+		DEBUG_STDOUT(printf("numAsStr[%d]: %c\n", i, numAsStr[i]));
 		serialized[i] = numAsStr[i];
 	}
 
 	char commandAsStr[NUM_OF_DIGITS_FOR_COMMAND_PREFIX+1];
 	intToStringDigits(command, NUM_OF_DIGITS_FOR_COMMAND_PREFIX, commandAsStr);
-	printf("commandAsStr is: %s\n", commandAsStr);
+	DEBUG_STDOUT(printf("commandAsStr is: %s\n", commandAsStr));
 
 	for (int i=0; i<NUM_OF_DIGITS_FOR_COMMAND_PREFIX; i++) {
-		printf("commandAsStr[%d]: %c\n", i, commandAsStr[i]);
+		DEBUG_STDOUT(printf("commandAsStr[%d]: %c\n", i, commandAsStr[i]));
 		serialized[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + i] = commandAsStr[i];
 	}
 
 	*len += NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX;
-	printf("len is: %d\n", *len);
-	printf("serialized is: %s\n", serialized);
-	printf("[Client::prepareToSend] Done\n");
-	fflush(stdout);
+	DEBUG_STDOUT(printf("len is: %d\n", *len));
+	DEBUG_STDOUT(printf("serialized is: %s\n", serialized));
+	DEBUG_STDOUT(printf("[Client::prepareToSend] Done\n"));
+	DEBUG_STDOUT(fflush(stdout));
 }
 
 bool Client::sendMsg(char* serialized, int length) {
+#ifdef DEBUG
 	printf("in sendMsg.. length: %d, msg:", length);
-	//	cout << "in sendMsg.. length: " << length << ", msg: ";
 
 	// print message content
 	for(int i=0; i< length; i++) {
 		printf("%c", serialized[i]);
-//		cout << serialized[i];
 	}
 
 	printf("\n");
-//	cout << endl;
-
+#endif
 
 	int totalSentBytes = 0;
 
 	if (length > SERVER_BUFFER_SIZE) {
 		printf("ERROR: can't send message that is longer than %d\n", SERVER_BUFFER_SIZE);
-//		cout << "ERROR: can't send message that is longer than " << SERVER_BUFFER_SIZE << endl;
 		return false;
 	}
 
 	// Write the message to the server
 	while (totalSentBytes < length) {
-		printf("sending..\n");
+		DEBUG_STDOUT(printf("sending..\n"));
 		int ret = send(sockfd, serialized, length - totalSentBytes, 0);
 
 		if (ret == 0) {
 			printf("ERROR: The server is terminated. exit..\n");
-//			cout << "ERROR: The server is terminated. exit..";
 			exit(1);
 		}
 
@@ -142,7 +135,6 @@ bool Client::sendMsg(char* serialized, int length) {
 
 			if (ret == 0) {
 				printf("ERROR: The server is terminated. exit..\n");
-//				cout << "ERROR: The server is terminated. exit..";
 				exit(1);
 			}
 
@@ -155,9 +147,7 @@ bool Client::sendMsg(char* serialized, int length) {
 		serialized += ret;
 	}
 
-	printf("totalSentBytes: %d\n", totalSentBytes);
-//	cout << "totalSentBytes: " << totalSentBytes << endl;
-
+	DEBUG_STDOUT(printf("totalSentBytes: %d\n", totalSentBytes));
 	return true;
 
 }
@@ -166,9 +156,8 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
 
 	// receive message in the following format: [7 digits representing the client name's length][client name]
 	int totalReceivedBytes = receiveMsgFromServer(sockfd, 0, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
-	printf("Client::readCommonServerResponse] 1: sockfd: %d, , totalReceivedBytes: %d\n", sockfd, totalReceivedBytes);
-	printf("total received bytes is %d\n", totalReceivedBytes);
-//	cout << "Server::readCommonServerRequest] 1: sockfd: " << sockfd << ", totalReceivedBytes: " << totalReceivedBytes << endl;
+	DEBUG_STDOUT(printf("Client::readCommonServerResponse] 1: sockfd: %d, , totalReceivedBytes: %d\n", sockfd, totalReceivedBytes));
+	DEBUG_STDOUT(printf("total received bytes is %d\n", totalReceivedBytes));
 
 	// client socket was closed and removed
 	if (totalReceivedBytes == -1) {
@@ -183,21 +172,18 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
 	memset(len, '\0', NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + 1);
 	strncpy(len, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 	*msgLen = checkLength(len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, 0);
-	printf("msgLen is: %d, len: %s\n", *msgLen, len);
-//	cout << "msgLen is: " << *msgLen << ", len: " << len << endl;
+	DEBUG_STDOUT(printf("msgLen is: %d, len: %s\n", *msgLen, len));
 
 	// convert the received command digit to int
 	char receivedStatus[NUM_OF_DIGITS_FOR_RET_VAL_STATUS + 1];
 	memset(receivedStatus, '\0', NUM_OF_DIGITS_FOR_RET_VAL_STATUS + 1);
 	strncpy(receivedStatus, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
 	*status = checkLength(receivedStatus, NUM_OF_DIGITS_FOR_RET_VAL_STATUS, 0);
-	printf("status is: %d, receivedStatus: %s\n", *status, receivedStatus);
-//	cout << "status is: " << *status << ", receivedStatus: " << receivedStatus << endl;
+	DEBUG_STDOUT(printf("status is: %d, receivedStatus: %s\n", *status, receivedStatus));
 
 	// receive the content
 	totalReceivedBytes = receiveMsgFromServer(sockfd, totalReceivedBytes, ptr, *msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS);
-	printf("Client::readCommonServerResponse] 2: totalReceivedBytes: %d\n", totalReceivedBytes);
-//	cout << "Server::readCommonServerRequest] 2: totalReceivedBytes: " << totalReceivedBytes << endl;
+	DEBUG_STDOUT(printf("Client::readCommonServerResponse] 2: totalReceivedBytes: %d\n", totalReceivedBytes));
 
 	// client socket was closed and removed
 	if (totalReceivedBytes == -1) {
@@ -211,8 +197,7 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
  * length is num size. If num passed these checks - returns it as integer. Otherwise returns -1.
  */
 int Client::checkLength (char* num, int length, int minimalExpectedValue) {
-	printf("Client::checkLength\n");
-	fflush(stdout);
+	DEBUG_STDOUT(printf("Client::checkLength\n"));
 
 	for (int i=0; i<length; i++) {
 		fflush(stdout);
@@ -237,31 +222,27 @@ int Client::checkLength (char* num, int length, int minimalExpectedValue) {
  * In case that the client disconnected abruptly - it turns the terminateItself flag to true.
  */
 int Client::receiveMsgFromServer (int serverSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes) {
-	printf("Client::receiveMsgFromServer] 1: serverSockfd: %d, , totalReceivedBytes: %d\n", serverSockfd, totalReceivedBytes);
-//	cout << "[Server::receiveMsgFromServer] : serverSockfd: " << serverSockfd << ", totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
+	DEBUG_STDOUT(printf("Client::receiveMsgFromServer] 1: serverSockfd: %d, , totalReceivedBytes: %d\n", serverSockfd, totalReceivedBytes));
 	char * ptr = msg;
 
 	while (totalReceivedBytes < maximalReceivedBytes) {
-		printf("totalReceivedBytes: %d, maximalReceivedBytes: %d\n", totalReceivedBytes, maximalReceivedBytes);
-//		cout << "totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
+		DEBUG_STDOUT(printf("totalReceivedBytes: %d, maximalReceivedBytes: %d\n", totalReceivedBytes, maximalReceivedBytes));
+
 		int ret = recv(serverSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
-		printf("ret: %d\n", ret);
-//		cout << "ret: " << ret << endl;
-		printf("msg: %s\n", msg);
-//		cout << "msg: " << msg << endl;
+		DEBUG_STDOUT(printf("ret: %d\n", ret));
+		DEBUG_STDOUT(printf("msg: %s\n", msg));
 
 		if (ret == 0) {
 			printf("Error: Server is terminated. exit...\n");
-//			cout << "Error: Server is terminated. exit..." << endl;
 			exit(1);
 		}
 
 		if (ret < 0) {
-			printf("trying one more time\n");
+			DEBUG_STDOUT(printf("trying one more time\n"));
+
 			// trying to receive one more time after failing the first time
 			ret = recv(serverSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
-			printf("ret: %d\n", ret);
-//			cout << "ret: " << ret << endl;
+			DEBUG_STDOUT(printf("ret: %d\n", ret));
 
 			if (ret <= 0) {
 				printf("Error: Server is terminated. exit...\n");
@@ -283,7 +264,7 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command, void* ret
 	int retValLen = 0;
 	int status = 0;
 
-	printf("wait for receive\n");
+	DEBUG_STDOUT(printf("wait for receive\n"));
 	readCommonServerResponse(sockfd, retVal, &retValLen, &status);
 
 	if (status == 0) {
@@ -291,34 +272,14 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command, void* ret
 		return false;
 	}
 
-	printf("got success status\n");
+	DEBUG_STDOUT(printf("got success status\n"));
 
 	if (retValLen > 0) {
-		printf("received message length > 0. Calling to handleReturnValue\n");
+		DEBUG_STDOUT(printf("received message length > 0. Calling to handleReturnValue\n"));
 		handleReturnValue(status, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, retValLen, command, retValAsObj);
 	}
 
 	return true;
-
-	/*
-	//	cout << "wait for receive" << endl;
-	int ret = recv(sockfd, status, 1, 0);
-
-	if (ret < 0) {
-		// trying to receive one more time after failing the first time
-		ret = recv(sockfd, status, 1, 0);
-	}
-
-	if (ret < 0) {
-		printf("ERROR: got failure status!\n");
-//		cout << "ERROR: got failure status!" << endl;
-		return false;
-	}
-
-	printf("got success status\n");
-//	cout << "got success status" << endl;
-	return true;
-	*/
 }
 
 
@@ -326,16 +287,3 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command, void* ret
 // todo for click usage.
 //CLICK_ENDDECLS
 //ELEMENT_PROVIDES(TCPClient)
-
-
-
-
-//int main(int argc, char *argv[])
-//{
-//	cout << "start client" << endl;
-//
-//	Client *client = new Client(9095, "127.0.0.1");
-//	client->connectToServer();
-//	client->send(NULL, NULL);
-//	return 0;
-//}

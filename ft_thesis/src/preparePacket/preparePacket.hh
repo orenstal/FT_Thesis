@@ -11,8 +11,6 @@
 #include <click/element.hh>
 #include <click/packet_anno.hh>
 
-//#include "../common/pal_api/pals_manager.hh"
-
 #include <stdio.h>
 #include <string.h>
 #include "client.hh"
@@ -50,8 +48,6 @@ private:
 	uint16_t _mbId;
 	int _mbState;
 	Client *detLoggerClient;
-//	bool _isMasterMode;
-//	bool _recover;
 
 	void* prepareGetPalsByMBIdAndPackId(uint16_t mbId, uint64_t packId);
 

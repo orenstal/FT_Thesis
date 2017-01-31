@@ -3,10 +3,10 @@
 
 
 void DetLoggerClient::serializePalsManagerObject(int command, void* obj, char* serialized, int* len) {
-	cout << "DetLoggerClient::serializePalsManagerObject" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::serializePalsManagerObject" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 
-	cout << "start serializing det_logger client" << endl;
+	DEBUG_STDOUT(cout << "start serializing det_logger client" << endl);
 	PALSManager::serialize(pm, serialized, len);
 }
 
@@ -37,7 +37,7 @@ void DetLoggerClient::serializeDeleteFirstPackets(int command, void* obj, char* 
 }
 
 void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
-	cout << "DetLoggerClient::serializeObject" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::serializeObject" << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		serializePalsManagerObject(command, obj, serialized, len);
@@ -53,46 +53,51 @@ void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, 
 }
 
 void DetLoggerClient::handleGetPacketIdsResponse(int command, char* retVal, int len, void* retValAsObj) {
-	cout << "DetLoggerClient::handleGetPacketIdsResponse" << endl;
-	cout << "len is: " << len << ", retVal is: " << retVal << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::handleGetPacketIdsResponse" << endl);
+	DEBUG_STDOUT(cout << "len is: " << len << ", retVal is: " << retVal << endl);
 
 	vector<uint64_t> * vectorRetVal = static_cast<vector<uint64_t>*>(retValAsObj);
-	cout << "starting with vectorRetVal size: " << vectorRetVal->size() << endl;
+	DEBUG_STDOUT(cout << "starting with vectorRetVal size: " << vectorRetVal->size() << endl);
 
 	uint64_t* ret = (uint64_t*)retVal;
 	uint32_t numOfPacketIds = len/sizeof(uint64_t*);	//todo should be sizeof(uint64_t) ??
-	cout << "numOfPacketIds: " << numOfPacketIds << ", received packet ids are:" << endl;
+	DEBUG_STDOUT(cout << "numOfPacketIds: " << numOfPacketIds << ", received packet ids are:" << endl);
 
 	for (uint32_t i =0; i<numOfPacketIds; i++) {
-		cout << "ret[" << i << "]: " << ret[i] << endl;
+		DEBUG_STDOUT(cout << "ret[" << i << "]: " << ret[i] << endl);
 		vectorRetVal->push_back(ret[i]);
 	}
-	cout << "leaving with vectorRetVal size: " << vectorRetVal->size() << endl;
-	cout << "done handling" << endl;
+
+	DEBUG_STDOUT(cout << "leaving with vectorRetVal size: " << vectorRetVal->size() << endl);
+	DEBUG_STDOUT(cout << "done handling" << endl);
 }
 
 void DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen, void* retValAsObj) {
-	cout << "DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse" << endl);
+
 	PALSManager* pm = static_cast<PALSManager*>(retValAsObj);
 
 	PALSManager::deserialize(retVal, pm);
 
 	pm->printContent();
 	*((PALSManager*)retValAsObj) = *pm;
-	cout << "[DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse] done" << endl;
+
+	DEBUG_STDOUT(cout << "[DetLoggerClient::handleGetPalsByMBIdAndPackIdResponse] done" << endl);
 }
 
 void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
-	cout << "DetLoggerClient::handleReturnValue" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::handleReturnValue" << endl);
 
 	if (status == 0 || command == STORE_COMMAND_TYPE  || command == DELETE_PACKETS_COMMAND_TYPE || len <= 0) {
-		cout << "nothing to handle." << endl;
+		DEBUG_STDOUT(cout << "nothing to handle." << endl);
 	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
 		handleGetPacketIdsResponse(command, retVal, len, retValAsObj);
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
 		handleGetPalsByMBIdAndPackIdResponse(command, retVal, len, retValAsObj);
 	}
 }
+
+// ---------------------------------- Mocked client -------------------------------
 
 void DetLoggerClient::runTests(char* address) {
 	cout << "starting det logger client" << endl;
@@ -333,9 +338,3 @@ void DetLoggerClient::getPals(DetLoggerClient *client, void* msgToSend) {
 	cout << "done" << endl;
 
 }
-
-
-//int main(int argc, char *argv[]) {
-//	DetLoggerClient::runTests("127.0.0.1");
-//	return 0;
-//}

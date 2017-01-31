@@ -82,7 +82,7 @@ public:
  };
 
 void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, int msgLen) {
-	cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl);
 
 	WrappedPacketData* wpd = new WrappedPacketData;
 	uint64_t *q = (uint64_t*)msg;
@@ -99,13 +99,6 @@ void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, 
 	unsigned char* packetData = (unsigned char*) p;
 	unsigned char* data = new unsigned char[wpd->size];
 	memcpy(data, packetData, wpd->size);
-	/*
-	char *r = (char*)p;
-
-	for (int i=0; i< wpd->size; i++, r++) {
-		data[i] = *r;
-	}
-	*/
 
 	wpd->data = data;
 	return (void*)wpd;
@@ -113,7 +106,7 @@ void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, 
 
 
 void* PacketLoggerServer::deserializeClientReplayRequest(int command, char* msg, int msgLen) {
-	cout << "PacketLoggerServer::deserializeClientReplayRequest" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientReplayRequest" << endl);
 
 	ReplayPackets* replayData = new ReplayPackets;
 	uint16_t *q = (uint16_t*)msg;
@@ -137,26 +130,28 @@ void* PacketLoggerServer::deserializeClientReplayRequest(int command, char* msg,
 	int vectorLen = msgLen - (2*sizeof(uint16_t) + MAX_ADDRESS_LEN*sizeof(char));
 	int totalNumOfPacketIdsToReplay = vectorLen / sizeof(uint64_t);
 
-	cout << "vectorLen: " << vectorLen << ", totalNumOfPacketIdsToReplay: " << totalNumOfPacketIdsToReplay << endl;
+	DEBUG_STDOUT(cout << "vectorLen: " << vectorLen << ", totalNumOfPacketIdsToReplay: " << totalNumOfPacketIdsToReplay << endl);
 
 	uint64_t *v = (uint64_t*)p;
 
 	for (int i=0; i<totalNumOfPacketIdsToReplay; i++) {
-		cout << "received v[" << i << "] is: " << v[i] << "; ";
 		replayData->packetIds->push_back(v[i]);
 	}
 
-	cout << "replayData: mbId: " << replayData->mbId << ", port: " << replayData->port << ", address: " << replayData->address << ", vector: ";
+#ifdef DEBUG
+	cout << "replayData: mbId: " << replayData->mbId << ", port: " << replayData->port << ", address: " << replayData->address << ", vector: " << endl;
+
 	for (int i=0; i< replayData->packetIds->size(); i++) {
 		cout << "[" << i << "] = " << (*replayData->packetIds)[i] << endl;
 	}
+#endif
 
 	return (void*)replayData;
 }
 
 
 void* PacketLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
-	cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		return deserializeClientStoreRequest(command, msg, msgLen);
@@ -170,12 +165,14 @@ void* PacketLoggerServer::deserializeClientRequest(int command, char* msg, int m
 }
 
 bool PacketLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "ProgressLoggerServer::processStoreRequest" << endl;
+	DEBUG_STDOUT(cout << "ProgressLoggerServer::processStoreRequest" << endl);
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
 
 	PacketVersionsData* packetVersions = getOrCreateServerProgressData(wpd->packetId);
 	addPacketVersion(packetVersions, wpd);
+#ifdef DEBUG
 	printState();
+#endif
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;
@@ -184,39 +181,33 @@ bool PacketLoggerServer::processStoreRequest(void* obj, char* retVal, int* retVa
 }
 
 bool PacketLoggerServer::processGetPacketByIdRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "PacketLoggerServer::processGetPacketByIdRequest" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerServer::processGetPacketByIdRequest" << endl);
 	uint64_t packId = 0;
 
 	// extract packId from client request
 	uint64_t *p = (uint64_t*)obj;
 	packId = *p;
 
-	cout << "packId: " << packId << endl;
+	DEBUG_STDOUT(cout << "packId: " << packId << endl);
 	getPacket(packId, (unsigned char*)retVal, retValLen);
 
-	cout << "packet is: " << retVal << endl;
-
+	DEBUG_STDOUT(cout << "packet is: " << retVal << endl);
 	return true;
 }
 
 
 bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "ProgressLoggerServer::processReplayRequest" << endl;
+	DEBUG_STDOUT(cout << "ProgressLoggerServer::processReplayRequest" << endl);
 	ReplayPackets* replayData = (ReplayPackets*)obj;
 	vector<uint64_t>* packetsToReplay = replayData->packetIds;
 
-	cout << "packetsToReplay.size: " << packetsToReplay->size() << endl;
+	DEBUG_STDOUT(cout << "packetsToReplay.size: " << packetsToReplay->size() << endl);
 
 	char address[replayData->addressLen+1];
 	memset(address, '\0', replayData->addressLen+1);
 	memcpy(address, replayData->address, replayData->addressLen);
 
-//	int destMbSockfd = connectTodestMb(address, replayData->port);
-//
-//	if (destMbSockfd == -1) {
-//		cout << "ERROR: failed to connect dest mb" << endl;
-//	}
-	cout << "address : " << address << endl;
+	DEBUG_STDOUT(cout << "address : " << address << endl);
 
 	unsigned char packet[SERVER_BUFFER_SIZE];
 	int packetLen;
@@ -224,7 +215,7 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 	for (int i=0; i<packetsToReplay->size(); i++) {
 
 		int destMbSockfd = connectTodestMb(address, replayData->port);
-		cout << "destMbSockfd: " << destMbSockfd << endl;
+		DEBUG_STDOUT(cout << "destMbSockfd: " << destMbSockfd << endl);
 
 		if (destMbSockfd == -1) {
 			cout << "ERROR: failed to connect dest mb" << endl;
@@ -233,14 +224,13 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 
 		memset(packet, '\0', SERVER_BUFFER_SIZE);
 		packetLen = 0;
-		cout << "1" << endl;
 
 		uint64_t packId = (*packetsToReplay)[i];
-		cout << "sending packet id: " << packId << endl;
+		DEBUG_STDOUT(cout << "sending packet id: " << packId << endl);
 
 		if (getPacket(packId, packet, &packetLen)) {
 			if (packetLen > 0) {
-				cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl;
+				DEBUG_STDOUT(cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl);
 				sendMsgToDstMb(destMbSockfd, (char*)packet, packetLen);
 			}
 		}
@@ -248,8 +238,7 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 		close(destMbSockfd);
 	}
 
-
-	cout << "[ProgressLoggerServer::processReplayRequest] done" << endl;
+	DEBUG_STDOUT(cout << "[ProgressLoggerServer::processReplayRequest] done" << endl);
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;
@@ -259,7 +248,7 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 
 
 bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
-	cout << "command is: " << command << endl;
+	DEBUG_STDOUT(cout << "command is: " << command << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		return processStoreRequest(obj, retVal, retValLen);
@@ -273,35 +262,35 @@ bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, in
 }
 
 bool PacketLoggerServer::getPacket(uint64_t packId, unsigned char* retVal, int* retValLen) {
-	cout << "PacketLoggerServer::getPacket" << endl;
-	cout << "retVal location: " << &(*retVal) << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerServer::getPacket" << endl);
+	DEBUG_STDOUT(cout << "retVal location: " << &(*retVal) << endl);
+
 	PacketVersionsData* packetVersions = NULL;
 	*retValLen = 0;
 
 	uint64_t packetIdBase = packId >> 5;
 	uint8_t packetVersion = packId & 31;
 
-	cout << "packet id base is: " << packetIdBase << ", packet version is: " << unsigned(packetVersion) << endl;
+	DEBUG_STDOUT(cout << "packet id base is: " << packetIdBase << ", packet version is: " << unsigned(packetVersion) << endl);
 
 	if (packetsVersions.find(packetIdBase) != packetsVersions.end()) {
-		cout << "packIdBase " << packetIdBase << " exist in packetsVersions" << endl;
+		DEBUG_STDOUT(cout << "packIdBase " << packetIdBase << " exist in packetsVersions" << endl);
 		packetVersions = packetsVersions[packetIdBase];
 	}
 
 	if (packetVersions == NULL) {
-		cout << "WARNING: received packet id doesn't exist!!" << endl;
+		DEBUG_STDOUT(cout << "WARNING: received packet id doesn't exist!!" << endl);
 		return false;
 	}
 
 	uint8_t packetVersionsLen = packetVersions->index;
-	cout << "packetVersionsLen: " << unsigned(packetVersionsLen) << endl;
+	DEBUG_STDOUT(cout << "packetVersionsLen: " << unsigned(packetVersionsLen) << endl);
 
 	if (packetVersion < packetVersionsLen) {
 		packetVersionsLen = packetVersion;
 	}
 
-	cout << "~~ packetVersionsLen: " << unsigned(packetVersionsLen) << endl;
-
+	DEBUG_STDOUT(cout << "~~ packetVersionsLen: " << unsigned(packetVersionsLen) << endl);
 
 	vector<SinglePacketVersionData*> pvd = packetVersions->packet_versions;
 
@@ -317,13 +306,11 @@ bool PacketLoggerServer::getPacket(uint64_t packId, unsigned char* retVal, int* 
 
 
 	for (uint8_t i=0; i<packetVersionsLen; i++) {
-		cout << "in" << endl;
 		SinglePacketVersionData* spvd = pvd[i];
-		cout << "i: " << unsigned(i) << ", version: " << unsigned(spvd->version) << ". About to copy data of size: " << spvd->size << ", to offset: " << retVal+(int)spvd->offset <<  endl;
+		DEBUG_STDOUT(cout << "i: " << unsigned(i) << ", version: " << unsigned(spvd->version) << ". About to copy data of size: " << spvd->size << ", to offset: " << retVal+(int)spvd->offset <<  endl);
 		memcpy(retVal+(int)spvd->offset, spvd->data, (int)spvd->size);
 		*retValLen = max(*retValLen, (int)spvd->size);
 	}
-
 
 	return true;
 }
@@ -341,13 +328,6 @@ void PacketLoggerServer::addPacketVersion(PacketVersionsData* packetVersions, Wr
 	uint16_t size = wpd->size;
 	unsigned char* data = new unsigned char[size];	// todo I don't free this memory
 	memcpy(data, wpd->data, size);
-	/*
-	memset(data, 0, size);
-
-	for (int i=0; i< size; i++) {
-		data[i] = wpd->data[i];
-	}
-	*/
 
 	singlePacketData->data = data;
 
@@ -357,13 +337,15 @@ void PacketLoggerServer::addPacketVersion(PacketVersionsData* packetVersions, Wr
 }
 
 PacketVersionsData* PacketLoggerServer::getOrCreateServerProgressData(uint64_t packetId) {
-	cout << "PacketLoggerServer::getOrCreateServerProgressData" << endl;
-	cout << "packet id: " << packetId << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerServer::getOrCreateServerProgressData" << endl);
+	DEBUG_STDOUT(cout << "packet id: " << packetId << endl);
+
 	uint64_t packetIdBase = packetId >> 5;
 
 	PacketVersionsData* pvd;
 
-	cout << "packetsVersions.count(" << packetIdBase << "): " << packetsVersions.count(packetIdBase) << endl;
+	DEBUG_STDOUT(cout << "packetsVersions.count(" << packetIdBase << "): " << packetsVersions.count(packetIdBase) << endl);
+
 	if (!packetsVersions.count(packetIdBase)) {
 		pvd = new PacketVersionsData();
 		packetsVersions[packetIdBase] = pvd;
@@ -418,9 +400,8 @@ void PacketLoggerServer::freeDeserializedObject(void* obj, int command) {
 }
 
 int PacketLoggerServer::connectTodestMb(char* mbAddress, int mbPort) {
-	printf("PacketLoggerServer::connectTodestMb\n");
-	printf("mbAddress is: %s, mbPort: %d\n", mbAddress, mbPort);
-	fflush(stdout);
+	DEBUG_STDOUT(cout << "PacketLoggerServer::connectTodestMb" << endl);
+	DEBUG_STDOUT(cout << "mbAddress is: " << mbAddress << ", mbPort: " << mbPort << endl);
 
 	struct sockaddr_in sock_addr_dst_mb;
 	sock_addr_dst_mb.sin_family = AF_INET;
@@ -431,13 +412,9 @@ int PacketLoggerServer::connectTodestMb(char* mbAddress, int mbPort) {
 	//Create socket
 	int sockfd = socket(AF_INET , SOCK_STREAM , 0);
 	if (sockfd == -1) {
-//		cout << "ERROR: Could not create socket" << endl;
-		printf("ERROR: Could not create socket\n");
+		cout << "ERROR: Could not create socket" << endl;
 		return sockfd;
 	}
-
-	printf("Socket created\n");
-//	cout << "Socket created" << endl;
 
 	// activate keep-alive mechanism
 //	int val = 1;
@@ -445,8 +422,7 @@ int PacketLoggerServer::connectTodestMb(char* mbAddress, int mbPort) {
 
 	//Connect to remote server
 	if (connect(sockfd , (struct sockaddr *)&sock_addr_dst_mb , sizeof(sock_addr_dst_mb)) < 0) {
-//		click << "ERROR: Connect failed." << endl;
-		printf("ERROR: Connect failed.\n");
+		cout << "ERROR: Connect failed." << endl;
 		return -1;
 	}
 
@@ -454,39 +430,38 @@ int PacketLoggerServer::connectTodestMb(char* mbAddress, int mbPort) {
 		return -1;
 	}
 
-	printf("Connected successfully via sockfd %d\n", sockfd);
+	DEBUG_STDOUT(cout << "Connected successfully via sockfd " << sockfd << endl);
 	return sockfd;
 }
 
 bool PacketLoggerServer::sendMsgToDstMb(int destMbSockfd, char* msgToSend, int length) {
-	printf("in sendMsg.. length: %d, msg:", length);
+
+#ifdef DEBUG
+	cout << "in sendMsg.. length: " << length << ", msg:";
 
 	// print message content
 	for(int i=0; i< length; i++) {
 		printf("%c", msgToSend[i]);
-//		cout << serialized[i];
 	}
 
 	printf("\n");
-//	cout << endl;
-
+#endif
 
 	int totalSentBytes = 0;
 
 	if (length > SERVER_BUFFER_SIZE) {
-		printf("ERROR: can't send message that is longer than %d\n", SERVER_BUFFER_SIZE);
+		cout << "ERROR: can't send message that is longer than " << SERVER_BUFFER_SIZE << endl;
 		return false;
 	}
 
 
 	// Write the message to the server
 	while (totalSentBytes < length) {
-		printf("sending..\n");
+		DEBUG_STDOUT(cout << "sending.." << endl);
 		int ret = send(destMbSockfd, msgToSend, length - totalSentBytes, 0);
 
 		if (ret == 0) {
-			printf("ERROR: The server is terminated. exit..\n");
-//			cout << "ERROR: The server is terminated. exit..";
+			cout << "ERROR: The server is terminated. exit.." << endl;
 			return false;
 		}
 
@@ -495,7 +470,7 @@ bool PacketLoggerServer::sendMsgToDstMb(int destMbSockfd, char* msgToSend, int l
 			ret = send(destMbSockfd, msgToSend, length - totalSentBytes, 0);
 
 			if (ret == 0) {
-				printf("ERROR: The server is terminated. exit..\n");
+				cout << "ERROR: The server is terminated. exit.." << endl;
 				return false;
 			}
 
@@ -508,8 +483,7 @@ bool PacketLoggerServer::sendMsgToDstMb(int destMbSockfd, char* msgToSend, int l
 		msgToSend += ret;
 	}
 
-
-	printf("totalSentBytes: %d\n", totalSentBytes);
+	DEBUG_STDOUT(cout << "totalSentBytes: " << totalSentBytes << endl);
 
 	return true;
 

@@ -3,6 +3,8 @@
  */
 #include "server.hh"
 
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,13 @@ Server::Server(int port) {
 	newfd = -1;
 	yes = 1;
 	Server::port = port;
+
+	cout << "is debug Mode?" << endl;
+#ifdef DEBUG
+	cout << "Yes" << endl;
+#else
+	cout << "No" << endl;
+#endif
 }
 
 
@@ -29,18 +38,15 @@ void Server::init() {
 	FD_ZERO(&read_fds);
 
 	if((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		cout << "ERROR: Server-socket() error lol!" << endl;
+		DEBUG_STDOUT(cout << "ERROR: Server-socket() error lol!" << endl);
 		exit(1);
 	}
 
-	cout << "Server-socket() is OK..." << endl;
-	//"address already in use" error message
+	// prevent "address already in use" error
 	if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-		cout << "ERROR: Server-setsockopt() error lol!" << endl;
+		DEBUG_STDOUT(cout << "ERROR: Server-setsockopt() error lol!" << endl);
 		exit(1);
 	}
-
-	cout << "Server-setsockopt() is OK..." << endl;
 
 	// bind
 	serveraddr.sin_family = AF_INET;
@@ -49,24 +55,22 @@ void Server::init() {
 	memset(&(serveraddr.sin_zero), '\0', 8);
 
 	if(bind(listener, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
-		cout << "ERROR: Server-bind() error lol!" << endl;
+		DEBUG_STDOUT(cout << "ERROR: Server-bind() error lol!" << endl);
 		exit(1);
 	}
-	cout << "Server-bind() is OK..." << endl;
 
 	// listen
 	if(listen(listener, 1000) == -1) {
-		 cout << "ERROR: Server-listen() error lol!" << endl;
+		 DEBUG_STDOUT(cout << "ERROR: Server-listen() error lol!" << endl);
 		 exit(1);
 	}
-
-	cout << "Server-listen() is OK..." << endl;
 
 	// add the listener to the master set
 	FD_SET(listener, &master);
 
 	// keep track of the biggest file descriptor
 	fdmax = listener;
+	cout << "server init completed successfully" << endl;
 
 }
 
@@ -76,16 +80,13 @@ bool Server::run() {
 		read_fds = master;
 		pthread_mutex_unlock(&master_set_mtx);
 
-//		cout << "does 38 in read_fds? " << FD_ISSET(38, &read_fds) << endl;
-//		cout << "does 39 in read_fds? " << FD_ISSET(39, &read_fds) << endl;
-
 		if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
-			cout << "ERROR: Server-select() error lol! " << endl;
-			cout << "Reason: " << errno << endl;
+			DEBUG_STDOUT(cout << "ERROR: Server-select() error lol! " << endl);
+			DEBUG_STDOUT(cout << "Reason: " << errno << endl);
 			exit(1);
 		}
 
-		cout << "Server-select() is OK..." << endl;
+		DEBUG_STDOUT(cout << "Server-select() is OK..." << endl);
 
 		if(FD_ISSET(listener, &read_fds)) {
 			addNewClient();	// handle new connections
@@ -93,10 +94,10 @@ bool Server::run() {
 			//run through the existing connections looking for data to be read
 			for (set<int>::iterator it=connectedClients.begin(); it!=connectedClients.end();) {
 				set<int>::iterator currIter = it++;
-				cout << "currIter: " << *currIter << endl;
+				DEBUG_STDOUT(cout << "currIter: " << *currIter << endl);
 
 				if(FD_ISSET(*currIter, &read_fds)) {
-					cout << "start handling new request from sockfd: " << *currIter << endl;
+					DEBUG_STDOUT(cout << "start handling new request from sockfd: " << *currIter << endl);
 
 					// todo There is a design bug using select and multi-threading. For now
 					// i'm using sync mode rather than multi-threading. Later I need to user
@@ -124,12 +125,13 @@ bool Server::run() {
 }
 
 void Server::addNewClient() {
-	cout << "adding new client" << endl;
+	cout << "Adding new client" << endl;
+
 	socklen_t addrlen = sizeof(clientaddr);
 	if((newfd = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1) {
-		cout << "ERROR: Server-accept() error lol!" << endl;
+		DEBUG_STDOUT(cout << "ERROR: Server-accept() error lol!" << endl);
 	} else {
-		cout << "~ Server-accept() is OK..." << endl;
+		DEBUG_STDOUT(cout << "~ Server-accept() is OK..." << endl);
 
 		pthread_mutex_lock(&master_set_mtx);
 
@@ -149,10 +151,10 @@ void Server::addNewClient() {
 void Server::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
 	pthread_mutex_lock(&master_set_mtx);
 
-	cout << "start removing client " << sockfdToRemove << endl;
+	cout << "Start removing client " << sockfdToRemove << endl;
 
 	if (!FD_ISSET(sockfdToRemove, &master)) {
-		cout << "sockfdToRemove: " << sockfdToRemove << " is already removed" << endl;
+		DEBUG_STDOUT(cout << "sockfdToRemove: " << sockfdToRemove << " is already removed" << endl);
 		pthread_mutex_unlock(&master_set_mtx);
 		return;
 	}
@@ -173,13 +175,13 @@ void Server::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
 	// close it...
 	close(sockfdToRemove);
 
-	cout << "done removing client " << sockfdToRemove << endl;
+	cout << "Done removing client " << sockfdToRemove << endl;
 
 	pthread_mutex_unlock(&master_set_mtx);
 }
 
 void Server::handleClientRequestThread(int sockfd) {
-	cout << "about to read message from sockfd: " << sockfd << endl;
+	DEBUG_STDOUT(cout << "about to read message from sockfd: " << sockfd << endl);
 	char* msg = new char[SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 	int msgLen;	// msgLen doesn't include the command chars (as well as the msgLen digits themselves)
 	int command;
@@ -187,16 +189,18 @@ void Server::handleClientRequestThread(int sockfd) {
 	int retValLen = 0;
 
 	readCommonClientRequest(sockfd, msg, &msgLen, &command);
-	cout << "[Server::handleClientRequestThread] msgLen: " << msgLen << ", command: " << command << endl;
+	DEBUG_STDOUT(cout << "[Server::handleClientRequestThread] msgLen: " << msgLen << ", command: " << command << endl);
 
 	if (msgLen == -1) {
 		delete msg;
-		cout << "[Server::handleClientRequestThread] stop reading from sockfd " << sockfd << endl;
+		DEBUG_STDOUT(cout << "[Server::handleClientRequestThread] stop reading from sockfd " << sockfd << endl);
 		return;
 	}
 
 	// for debug usage
+#ifdef DEBUG
 	printMsg(msg, msgLen);
+#endif
 
 	// now we have msg and msgLen.
 	void* obj = deserializeClientRequest(command, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, msgLen);
@@ -223,46 +227,42 @@ void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 }
 
 bool Server::sendMsg(int sockfd, char* retVal, int length) {
-	printf("in sendMsg.. length: %d, msg:", length);
-	//	cout << "in sendMsg.. length: " << length << ", msg: ";
+	DEBUG_STDOUT(cout << "in sendMsg.. length: " << length << ", msg:");
 
+#ifdef DEBUG
 	// print message content
 	for(int i=0; i< length; i++) {
 		printf("%c", retVal[i]);
 	}
-
-	printf("\n");
-//	cout << endl;
-
+	cout << endl;
+#endif
 
 	int totalSentBytes = 0;
 
 	if (length > MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS) {
-		printf("ERROR: can't send message that is too long\n");
+		cout << "ERROR: can't send message that is too long" << endl;
 		return false;
 	}
 
 	// Write the message to the server
 	while (totalSentBytes < length) {
-		printf("sending.. totalSentBytes: %d\n", totalSentBytes);
-		fflush(stdout);
+		DEBUG_STDOUT(cout << "sending.. totalSentBytes: " << totalSentBytes << endl);
+
 		int ret = send(sockfd, retVal, length - totalSentBytes, 0);
 
 		if (ret == 0) {
-			printf("ERROR: The client is terminated. Stop sending..\n");
-			fflush(stdout);
+			cout << "ERROR: The client is terminated. Stop sending.." << endl;
 			break;
 		}
 
 		if (ret < 0) {
-			printf("ERROR: Failed to send. Trying one more time..\n");
-			fflush(stdout);
+			cout << "ERROR: Failed to send. Trying one more time.." << endl;
+
 			// trying to send one more time after failing the first time
 			ret = send(sockfd, retVal, length - totalSentBytes, 0);
 
 			if (ret == 0) {
-				printf("ERROR: The client is terminated. Stop sending..\n");
-				fflush(stdout);
+				cout << "ERROR: The client is terminated. Stop sending.." << endl;
 				exit(1);
 			}
 
@@ -275,8 +275,7 @@ bool Server::sendMsg(int sockfd, char* retVal, int length) {
 		retVal += ret;
 	}
 
-	printf("totalSentBytes: %d\n", totalSentBytes);
-	fflush(stdout);
+	DEBUG_STDOUT(cout << "totalSentBytes: " << totalSentBytes << endl);
 
 	if (totalSentBytes == length) {
 		return true;
@@ -291,12 +290,14 @@ void Server::writeResponseToClient(int sockfd, bool succeed, char* retVal, int r
 	char numAsStr[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+1];
 	intToStringDigits(retValLen, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, numAsStr);
 
-	printf("numAsStr is: %s, retValLen is: %d\n", numAsStr, retValLen);
+	DEBUG_STDOUT(cout << "numAsStr is: " << numAsStr << ", retValLen is: " << retValLen << endl);
 
+#ifdef DEBUG
 	for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
 		printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
 		retVal[i] = numAsStr[i];
 	}
+#endif
 
 	if (succeed) {
 		retVal[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX] = '1';
@@ -308,44 +309,14 @@ void Server::writeResponseToClient(int sockfd, bool succeed, char* retVal, int r
 	// without NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS digits.
 	// Therefore we need to add them to the total length that should be sent back to client.
 	retValLen += NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + NUM_OF_DIGITS_FOR_RET_VAL_STATUS;
-	cout << "sending " << retValLen << " bytes as response to client with sockfd: " << sockfd << endl;
+	DEBUG_STDOUT(cout << "sending " << retValLen << " bytes as response to client with sockfd: " << sockfd << endl);
 
 	sendMsg(sockfd, retVal, retValLen);
-
-	/*
-	if (succeed) {
-		ret = send(sockfd, RESPONSE_STATE_SUCCESS, 1, 0);
-
-		if (ret < 0) {
-			// trying to send one more time after failing the first time
-			ret = send(sockfd, RESPONSE_STATE_SUCCESS, 1, 0);
-		}
-	} else {
-		ret = send(sockfd, RESPONSE_STATE_FAILURE, 1, 0);
-
-		if (ret < 0) {
-			// trying to send one more time after failing the first time
-			ret = send(sockfd, RESPONSE_STATE_FAILURE, 1, 0);
-		}
-	}
-
-	if (ret <= 0) {
-		cout << "ERROR: failed to write response (" << succeed << ") to client with sockfd: " << sockfd << endl;
-	} else {
-		cout << "response (" << succeed << ") was written successfully to client with sockfd: " << sockfd << endl;
-	}
-	*/
-
 }
 
 void Server::printMsg(char* msg, int msgLen) {
 	cout << "message full len is: " << msgLen + NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + NUM_OF_DIGITS_FOR_COMMAND_PREFIX << endl;
 	cout << "message len is: " << msgLen << endl;
-//	cout << "message is: " << endl;
-//	for (int i=0; i<msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
-//		cout << msg[i];
-//	}
-//	cout << endl;
 }
 
 
@@ -353,7 +324,7 @@ void Server::readCommonClientRequest(int sockfd, char* msg, int* msgLen, int* co
 
 	// receive message in the following format: [7 digits representing the client name's length][client name]
 	int totalReceivedBytes = receiveMsgFromClient(sockfd, 0, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX);
-	cout << "Server::readCommonClientRequest] 1: sockfd: " << sockfd << ", totalReceivedBytes: " << totalReceivedBytes << endl;
+	DEBUG_STDOUT(cout << "Server::readCommonClientRequest] 1: sockfd: " << sockfd << ", totalReceivedBytes: " << totalReceivedBytes << endl);
 
 	// client socket was closed and removed
 	if (totalReceivedBytes == -1) {
@@ -368,18 +339,18 @@ void Server::readCommonClientRequest(int sockfd, char* msg, int* msgLen, int* co
 	memset(len, '\0', NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX + 1);
 	strncpy(len, msg, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 	*msgLen = checkLength(len, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, 1);
-	cout << "msgLen is: " << *msgLen << ", len: " << len << endl;
+	DEBUG_STDOUT(cout << "msgLen is: " << *msgLen << ", len: " << len << endl);
 
 	// convert the received command digit to int
 	char receivedCommand[NUM_OF_DIGITS_FOR_COMMAND_PREFIX + 1];
 	memset(receivedCommand, '\0', NUM_OF_DIGITS_FOR_COMMAND_PREFIX + 1);
 	strncpy(receivedCommand, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, NUM_OF_DIGITS_FOR_COMMAND_PREFIX);
 	*command = checkLength(receivedCommand, NUM_OF_DIGITS_FOR_COMMAND_PREFIX, 0);
-	cout << "command is: " << *command << ", receivedCommand: " << receivedCommand << endl;
+	DEBUG_STDOUT(cout << "command is: " << *command << ", receivedCommand: " << receivedCommand << endl);
 
 	// receive the content
 	totalReceivedBytes = receiveMsgFromClient(sockfd, totalReceivedBytes, ptr, *msgLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX);
-	cout << "Server::readCommonClientRequest] 2: totalReceivedBytes: " << totalReceivedBytes << endl;
+	DEBUG_STDOUT(cout << "Server::readCommonClientRequest] 2: totalReceivedBytes: " << totalReceivedBytes << endl);
 
 	// client socket was closed and removed
 	if (totalReceivedBytes == -1) {
@@ -416,14 +387,13 @@ int Server::checkLength (char* num, int length, int minimalExpectedValue) {
  */
 int Server::receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes)
 {
-	cout << "[Server::receiveMsgFromClient] : clientSockfd: " << clientSockfd << ", totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
+	DEBUG_STDOUT(cout << "[Server::receiveMsgFromClient] : clientSockfd: " << clientSockfd << ", totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl);
 	char * ptr = msg;
 
 	while (totalReceivedBytes < maximalReceivedBytes) {
-		cout << "totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl;
+		DEBUG_STDOUT(cout << "totalReceivedBytes: " << totalReceivedBytes << ", maximalReceivedBytes: " << maximalReceivedBytes << endl);
 		int ret = recv(clientSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
-		cout << "ret: " << ret << endl;
-//		cout << "msg: " << msg << endl;
+		DEBUG_STDOUT(cout << "ret: " << ret << endl);
 
 		if (ret == 0) {
 			removeClient(clientSockfd, ret);
@@ -431,10 +401,11 @@ int Server::receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char
 		}
 
 		if (ret < 0) {
-			cout << "trying one more time" << endl;
+			DEBUG_STDOUT(cout << "trying one more time" << endl);
+
 			// trying to receive one more time after failing the first time
 			ret = recv(clientSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
-			cout << "ret: " << ret << endl;
+			DEBUG_STDOUT(cout << "ret: " << ret << endl);
 
 			if (ret <= 0) {
 				removeClient(clientSockfd, ret);
@@ -450,15 +421,15 @@ int Server::receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char
 }
 
 void* Server::deserializeClientRequest(int command, char* msg, int msgLen) {
-	cout << "Server::deserializeClientRequest" << endl;
+	DEBUG_STDOUT(cout << "Server::deserializeClientRequest" << endl);
 	return NULL;
 }
 
 bool Server::processRequest(void* obj, int command, char* retVal, int* retValLen) {
-	cout << "Server::processRequest" << endl;
+	DEBUG_STDOUT(cout << "Server::processRequest" << endl);
 	return true;
 }
 
 void Server::freeDeserializedObject(void* obj, int command) {
-	cout << "Server::freeObject" << endl;
+	DEBUG_STDOUT(cout << "Server::freeObject" << endl);
 }

@@ -6,7 +6,7 @@
  */
 
 #include "../common/pal_api/pals_manager.hh"
-#include "../tcp_clients/packets_logger_client.hh";
+#include "../tcp_clients/packets_logger_client.hh"
 #include "../common/replayPackets/replay_packets.hh"
 #include "server.hh"
 #include <map>
@@ -91,7 +91,7 @@ public:
  };
 
 void* DetLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
-	cout << "DetLoggerServer::deserializeClientRequest" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::deserializeClientRequest" << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		return deserializeClientStoreRequest(command, msg, msgLen);
@@ -107,14 +107,14 @@ void* DetLoggerServer::deserializeClientRequest(int command, char* msg, int msgL
 }
 
 void* DetLoggerServer::deserializeClientStoreRequest(int command, char* msg, int msgLen) {
-	cout << "DetLoggerServer::deserializeClientStoreRequest" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::deserializeClientStoreRequest" << endl);
 	PALSManager* pm = new PALSManager();
 	PALSManager::deserialize(msg, pm);
 	return (void*)pm;
 }
 
 bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "DetLoggerServer::processStoreRequest" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::processStoreRequest" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 	pm->printContent();
 	PacketData* packetData = getOrCreatePacketData(pm);
@@ -122,7 +122,10 @@ bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLe
 
 	ServerProgressData* packetIds = getOrCreateServerProgressData(pm->getMBId());
 	addPacketId(pm->getPacketId(), packetIds);
+
+#ifdef DEBUG
 	printState();
+#endif
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;
@@ -131,15 +134,15 @@ bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLe
 }
 
 bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "DetLoggerServer::processGetProcessedPacketsRequest" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::processGetProcessedPacketsRequest" << endl);
 
 	// extract the mbId from the client request
 	uint16_t mbId = *((uint16_t*)obj);
-	cout << "mbId is: " << mbId << endl;
+	DEBUG_STDOUT(cout << "mbId is: " << mbId << endl);
 	ServerProgressData* spd = getServerProgressData(mbId);
 
 	if (spd == NULL) {
-		cout << "WARNING: spd is NULL !!" << endl;
+		DEBUG_STDOUT(cout << "WARNING: spd is NULL !!" << endl);
 		*retValLen = 0;
 		return true;
 	}
@@ -152,17 +155,17 @@ bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal,
 
 	for (uint32_t i=0; i< spd->index; i++) {
 		returnValue[i] = packetIds[i];
-		cout << "returnValue[" << i << "]: " << returnValue[i] << endl;
+		DEBUG_STDOUT(cout << "returnValue[" << i << "]: " << returnValue[i] << endl);
 	}
 
 	*retValLen = spd->index * sizeof(uint64_t*);
-	cout << "retValLen: " << *retValLen << ", spd->index: " << spd->index << ", sizeof(uint64_t*): " << sizeof(uint64_t*) << endl;
+	DEBUG_STDOUT(cout << "retValLen: " << *retValLen << ", spd->index: " << spd->index << ", sizeof(uint64_t*): " << sizeof(uint64_t*) << endl);
 
 	return true;
 }
 
 bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "DetLoggerServer::processGetPalsRequest" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::processGetPalsRequest" << endl);
 	uint16_t mbId = 0;
 	uint64_t packId = 0;
 
@@ -174,11 +177,11 @@ bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retVal
 	uint64_t *p = (uint64_t*)q;
 	packId = *p;
 
-	cout << "mbId is: " << mbId << ", packId: " << packId << endl;
+	DEBUG_STDOUT(cout << "mbId is: " << mbId << ", packId: " << packId << endl);
 	PacketData* packetData = getPacketData(mbId, packId);
 
 	if (packetData == NULL) {
-		cout << "WARNING: packetData is NULL !!" << endl;
+		DEBUG_STDOUT(cout << "WARNING: packetData is NULL !!" << endl);
 		*retValLen = 0;
 		return false;
 	}
@@ -190,13 +193,13 @@ bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retVal
 	convertPacketDataToPM(pm, packetData);
 	PALSManager::serialize(pm, retVal, retValLen);
 
-	cout << "retValLen: " << *retValLen << endl;
+	DEBUG_STDOUT(cout << "retValLen: " << *retValLen << endl);
 
 	return true;
 }
 
 bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "[DetLoggerServer::processDeletePacketsRequest]" << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerServer::processDeletePacketsRequest]" << endl);
 	uint16_t mbId;
 	uint32_t totalPacketsToRemove = 0;	// the number of first packets to be removed
 
@@ -209,7 +212,7 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 	totalPacketsToRemove = *tp;
 	tp++;
 
-	cout << "mbId: " << mbId << ", total packets to delete: " << totalPacketsToRemove << endl;
+	DEBUG_STDOUT(cout << "mbId: " << mbId << ", total packets to delete: " << totalPacketsToRemove << endl);
 
 	ServerProgressData* spd = getServerProgressData(mbId);
 
@@ -217,8 +220,11 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 		deleteFirstPackets(mbId, totalPacketsToRemove, spd);
 	}
 
+#ifdef DEBUG
+	DEBUG_STDOUT();
 	cout << "state after deletion:" << endl;
 	printState();
+#endif
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;
@@ -229,11 +235,12 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 
 
 void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToRemove, ServerProgressData* spd) {
-	cout << "[DetLoggerServer::deleteFirstPackets] Start" << endl;
-	cout << "spd->index before: " << spd->index << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] Start" << endl);
+	DEBUG_STDOUT(cout << "spd->index before: " << spd->index << endl);
+
 	mbDataMap *mbData = NULL;
 	if (detData.find(mbId) != detData.end()) {
-		cout << "mbId " << mbId << " exist in detData" << endl;
+		DEBUG_STDOUT(cout << "mbId " << mbId << " exist in detData" << endl);
 		mbData = &(detData[mbId]);
 	}
 
@@ -248,29 +255,30 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToR
 
 	spd->index -= totalPacketsToRemove;
 
-	cout << "spd->index after: " << spd->index << endl;
-	cout << "[DetLoggerServer::deleteFirstPackets] End" << endl;
+	DEBUG_STDOUT(cout << "spd->index after: " << spd->index << endl);
+	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] End" << endl);
 }
 
 
 void DetLoggerServer::deletePacketFromMbData(mbDataMap *mbData, uint64_t packetToRemove) {
-	cout << "[DetLoggerServer::deletePacketFromMbData] Start" << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerServer::deletePacketFromMbData] Start" << endl);
+
 	if (mbData != NULL) {
-		cout << "1" << endl;
-		cout << "packetToRemove: " << packetToRemove << endl;
+		DEBUG_STDOUT(cout << "packetToRemove: " << packetToRemove << endl);
+
 		if (mbData->find(packetToRemove) != mbData->end()) {
-			cout << "packetToRemove: " << packetToRemove << endl;
+			DEBUG_STDOUT(cout << "packetToRemove: " << packetToRemove << endl);
 			PacketData *packetData = mbData->at(packetToRemove);
 			delete packetData;
 			mbData->erase(packetToRemove);
 		}
 	}
-	cout << "[DetLoggerServer::deletePacketFromMbData] End" << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerServer::deletePacketFromMbData] End" << endl);
 }
 
 
 bool DetLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
-	cout << "command is: " << command << endl;
+	DEBUG_STDOUT(cout << "command is: " << command << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		return processStoreRequest(obj, retVal, retValLen);
@@ -313,50 +321,50 @@ void DetLoggerServer::updatePacketData(PacketData* packetData, PALSManager* pm) 
 }
 
 void DetLoggerServer::convertPacketDataToPM(PALSManager* pm, PacketData* packetData) {
-	cout << "DetLoggerServer::convertPacketDataToPM" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::convertPacketDataToPM" << endl);
 
 	uint8_t gpalsLen = packetData->gpal_index;
-	cout << "gpalsLen: " << unsigned(gpalsLen) << endl;
+	DEBUG_STDOUT(cout << "gpalsLen: " << unsigned(gpalsLen) << endl);
 
 	for (uint8_t i=0; i<gpalsLen; i++) {
 		gpal* currGPal = packetData->gpal_vector[i];
 		pm->createGPalAndAdd(currGPal->var_id, currGPal->val);
 
-		cout << "gpal[" << unsigned(i) << "]->var_id: " << currGPal->var_id << endl;
+		DEBUG_STDOUT(cout << "gpal[" << unsigned(i) << "]->var_id: " << currGPal->var_id << endl);
 	}
-	cout << " done gpals" << endl;
+	DEBUG_STDOUT(cout << " done gpals" << endl);
 
 	uint8_t spalsLen = packetData->spal_index;
-	cout << "spalsLen: " << unsigned(spalsLen) << endl;
+	DEBUG_STDOUT(cout << "spalsLen: " << unsigned(spalsLen) << endl);
 
 	for (uint8_t i=0; i<spalsLen; i++) {
 		spal* currSPal = packetData->spal_vector[i];
 		pm->createSPalAndAdd(currSPal->var_id, currSPal->seq_num);
 
-		cout << "spal[" << unsigned(i) << "]->var_id: " << currSPal->var_id << endl;
+		DEBUG_STDOUT(cout << "spal[" << unsigned(i) << "]->var_id: " << currSPal->var_id << endl);
 	}
 
-	cout << "[DetLoggerServer::convertPacketDataToPM] Done" << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerServer::convertPacketDataToPM] Done" << endl);
 }
 
 PacketData* DetLoggerServer::getOrCreatePacketData(PALSManager* pm) {
 	PacketData* packetData;
 
 	if (detData.find(pm->getMBId()) == detData.end()) {
-		cout << "creating a new packetData for new mb: " << pm->getMBId() << endl;
+		DEBUG_STDOUT(cout << "creating a new packetData for new mb: " << pm->getMBId() << endl);
 		packetData = new PacketData();
 		mbDataMap mbData;
 		mbData.insert(make_pair(pm->getPacketId(), packetData));
 		detData.insert(make_pair(pm->getMBId(), mbData));
 	} else {
-		cout << "packetData of mb: " << pm->getMBId() << " is already exist." << endl;
+		DEBUG_STDOUT(cout << "packetData of mb: " << pm->getMBId() << " is already exist." << endl);
 
 		if (detData[pm->getMBId()].find(pm->getPacketId()) == detData[pm->getMBId()].end()) {
-			cout << "creating a new item for packet id: " << pm->getPacketId() << endl;
+			DEBUG_STDOUT(cout << "creating a new item for packet id: " << pm->getPacketId() << endl);
 			packetData = new PacketData();
 			detData[pm->getMBId()].insert(make_pair(pm->getPacketId(), packetData));
 		} else {
-			cout << "updating item for existing packet id: " << pm->getPacketId() << endl;
+			DEBUG_STDOUT(cout << "updating item for existing packet id: " << pm->getPacketId() << endl);
 			packetData = detData[pm->getMBId()][pm->getPacketId()];
 		}
 	}
@@ -365,13 +373,14 @@ PacketData* DetLoggerServer::getOrCreatePacketData(PALSManager* pm) {
 }
 
 PacketData* DetLoggerServer::getPacketData(uint16_t mbId, uint64_t packId) {
-	cout << "DetLoggerServer::getPacketData" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerServer::getPacketData" << endl);
 	PacketData* packetData = NULL;
 
 	if (detData.find(mbId) != detData.end()) {
-		cout << "mbId " << mbId << " exist in detData" << endl;
+		DEBUG_STDOUT(cout << "mbId " << mbId << " exist in detData" << endl);
+
 		if (detData[mbId].find(packId) != detData[mbId].end()) {
-			cout << "packId " << packId << " exist in detData[mbId]" << endl;
+			DEBUG_STDOUT(cout << "packId " << packId << " exist in detData[mbId]" << endl);
 			packetData = detData[mbId][packId];
 		}
 	}

@@ -8,7 +8,7 @@
 #include "packets_logger_client.hh"
 
 void PacketLoggerClient::serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len) {
-	cout << "PacketLoggerClient::serializeWrappedPacketDataObject" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerClient::serializeWrappedPacketDataObject" << endl);
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
 	uint16_t size = wpd->size;
 
@@ -31,7 +31,7 @@ void PacketLoggerClient::serializeWrappedPacketDataObject(int command, void* obj
 
 	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
 
-	cout << "len is: " << *len << endl;
+	DEBUG_STDOUT(cout << "len is: " << *len << endl);
 }
 
 void PacketLoggerClient::serializeGetPacketById(int command, void* obj, char* serialized, int* len) {
@@ -70,7 +70,7 @@ void PacketLoggerClient::serializeReplayPacketsByIds(int command, void* obj, cha
 
 	vector<uint64_t>* vec = replayData->packetIds;
 	for (int i=0; i< vec->size(); i++) {
-		cout << "[" << i << "] = " << (*vec)[i] << endl;
+		DEBUG_STDOUT(cout << "[" << i << "] = " << (*vec)[i] << endl);
 		*vecInput = (*vec)[i];
 		vecInput++;
 	}
@@ -81,7 +81,7 @@ void PacketLoggerClient::serializeReplayPacketsByIds(int command, void* obj, cha
 
 
 void PacketLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
-	cout << "PacketLoggerClient::serializeObject" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerClient::serializeObject" << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		serializeWrappedPacketDataObject(command, obj, serialized, len);
@@ -93,21 +93,24 @@ void PacketLoggerClient::serializeObject(int command, void* obj, char* serialize
 }
 
 void PacketLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
-	cout << "PacketLoggerClient::handleReturnValue" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerClient::handleReturnValue" << endl);
 
 	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
-		cout << "nothing to handle." << endl;
+		DEBUG_STDOUT(cout << "nothing to handle." << endl);
 	} else if (command == GET_PACKET_BY_PACKID_COMMAND_TYPE) {
-		cout << "received packet: " << retVal << endl;
+		DEBUG_STDOUT(cout << "received packet: " << retVal << endl);
 
 		char** returnedPacket = static_cast<char**>(retValAsObj);
 		*returnedPacket = new char[len];
 		memcpy(*returnedPacket, retVal, len);
-		cout << "returnedPacket: " << *returnedPacket << endl;
+		DEBUG_STDOUT(cout << "returnedPacket: " << *returnedPacket << endl);
 	} else if (command == REPLAY_PACKETS_BY_IDS_COMMAND_TYPE) {
-		cout << "received ack for packet replaying." << endl;
+		DEBUG_STDOUT(cout << "received ack for packet replaying." << endl);
 	}
 }
+
+
+// ---------------------------------- Mocked client -------------------------------
 
 void PacketLoggerClient::runTests(char* address) {
 	cout << "starting progress logger client" << endl;
@@ -377,12 +380,3 @@ void PacketLoggerClient::replayPackets(PacketLoggerClient *client, void* msgToSe
 		cout << "failed to send" << endl;
 	}
 }
-
-//int main(int argc, char *argv[]) {
-//	PacketLoggerClient::runTests("127.0.0.1");
-//	return 0;
-//}
-
-
-
-

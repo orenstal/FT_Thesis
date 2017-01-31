@@ -13,6 +13,16 @@
 #include <string.h>
 #include <iostream>
 
+#define DEBUG true
+#define DEBUG_STDOUT(x) x
+
+//#ifdef DEBUG
+//	#define DEBUG_STDOUT(x) x
+//#else
+//	#define DEBUG_STDOUT(x)
+//#endif
+
+
 /*
  * pal_manager.hh -- Manages pals per packet.
  */
@@ -89,7 +99,8 @@ class PALSManager {
 
 		void createGPalAndAdd(uint16_t var_id, const char* val) {
 			gpal gp;
-			cout << "createGPalAndAdd. gpal_index: " << unsigned(gpal_index) << endl;
+			DEBUG_STDOUT(cout << "createGPalAndAdd. gpal_index: " << unsigned(gpal_index) << endl);
+
 			memcpy(gp.val, val, GPAL_VAL_SIZE);
 			gp.var_id = var_id;
 
@@ -208,7 +219,7 @@ class PALSManager {
 			// actual spals
 			len+= pm->getSPalSize() * sizeof(spal);
 
-			cout << "serialization length is: " << len << endl;
+			DEBUG_STDOUT(cout << "serialization length is: " << len << endl);
 			return len;
 		}
 

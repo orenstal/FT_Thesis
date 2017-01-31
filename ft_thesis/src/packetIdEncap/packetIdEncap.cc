@@ -70,12 +70,11 @@ protected:
 public:
 	PacketLoggerClient(int port, char* address) : Client(port, address) {
 		// do nothing
-		printf("in PacketLoggerClient ctor");
 	}
  };
 
 void PacketLoggerClient::serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len) {
-	cout << "PacketLoggerClient::serializeWrappedPacketDataObject" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerClient::serializeWrappedPacketDataObject" << endl);
 	WrappedPacketData* wpd = (WrappedPacketData*)obj;
 	uint16_t size = wpd->size;
 
@@ -93,19 +92,14 @@ void PacketLoggerClient::serializeWrappedPacketDataObject(int command, void* obj
 	unsigned char *r = (unsigned char*)p;
 	const unsigned char* data = wpd->data;
 	memcpy(r, data, size);
-	/*
-	for (int i=0; i< size; i++, r++) {
-		*r = wpd->data[i];
-	}
-	*/
 
 	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(unsigned char) * size);
 
-	cout << "len is: " << *len << endl;
+	DEBUG_STDOUT(cout << "len is: " << *len << endl);
 }
 
 void PacketLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
-	cout << "PacketLoggerClient::serializeObject" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerClient::serializeObject" << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		serializeWrappedPacketDataObject(command, obj, serialized, len);
@@ -113,10 +107,10 @@ void PacketLoggerClient::serializeObject(int command, void* obj, char* serialize
 }
 
 void PacketLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
-	cout << "PacketLoggerClient::handleReturnValue" << endl;
+	DEBUG_STDOUT(cout << "PacketLoggerClient::handleReturnValue" << endl);
 
 	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
-		cout << "nothing to handle." << endl;
+		DEBUG_STDOUT(cout << "nothing to handle." << endl);
 	}
 }
 
@@ -148,7 +142,6 @@ PacketIdEncap::configure(Vector<String> &conf, ErrorHandler *errh)
 	.complete() < 0)
 		return -1;
 
-//	if (tci_word && !tci_word.equals("ANNO", 4)
 
 	_producerId = producerId;
 	_isMasterMode = isMasterMode;
@@ -165,7 +158,7 @@ PacketIdEncap::configure(Vector<String> &conf, ErrorHandler *errh)
 //	pthread_t t1;
 //	pthread_create(&t1, NULL, &PacketIdEncap::print_message, NULL);
 
-	cout << "continue.." << endl;
+	cout << "Done configuration.." << endl;
 
 
 
@@ -214,8 +207,6 @@ int PacketIdEncap::connectToServer(int port, char* address) {
 		cout << "ERROR: Could not create socket" << endl;
 	}
 
-	cout << "Socket created" << endl;
-
 	// activate keep-alive mechanism
 //	int val = 1;
 //	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
@@ -226,7 +217,7 @@ int PacketIdEncap::connectToServer(int port, char* address) {
 		return -1;
 	}
 
-	cout<<"Connected\n";
+	cout<<"Connected successfully\n";
 
 	return sockfd;
 }
@@ -240,7 +231,6 @@ uint32_t PacketIdEncap::getNexSeqNum() {
 	while (!isValid) {
 		if (_seqNum > MAX_SEQ_NUM) {
 			_seqNum = 128;	// the first valid sequence valid
-//			cout << "start again... MAX_SEQ_NUM: " << MAX_SEQ_NUM << endl;
 		}
 
 		if (isValidSeqNum(_seqNum)) {
@@ -300,15 +290,14 @@ uint64_t PacketIdEncap::createId() {
 
 	uint64_t unified = (innerVlan << 24) | (middleVlan << 12) | outerVlan;
 
-	cout << "unified id: " << unified << ", seqNum: " << nextSeqNum << ", inner: " << innerVlan << ", middle: " << middleVlan << ", outer: " << outerVlan << endl;
-
+	DEBUG_STDOUT(cout << "unified id: " << unified << ", seqNum: " << nextSeqNum << ", inner: " << innerVlan << ", middle: " << middleVlan << ", outer: " << outerVlan << endl);
 	return unified;
 }
 
 Packet *
 PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 {
-	cout << "[PacketIdEncap] ~Start pushing vlan layer with tci: " << vlan_tci << endl;
+	DEBUG_STDOUT(cout << "[PacketIdEncap] ~Start pushing vlan layer with tci: " << vlan_tci << endl);
 
 	if (p == 0) {
 		cout << "[PacketIdEncap] Error: invalid packet" << endl;
@@ -320,16 +309,18 @@ PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 
 	if ((tci & htons(0xFFF)) == 0) {
 		p->set_mac_header(p->data(), sizeof(click_ether));
-		cout << "[PacketIdEncap] Problem while pusing vlan tci: " << vlan_tci << endl;
+		DEBUG_STDOUT(cout << "[PacketIdEncap] Problem while pusing vlan tci: " << vlan_tci << endl);
 		return p;
+
 	} else if (WritablePacket *q = p->push(4)) {
 		memmove(q->data(), q->data() + 4, 16);
 		click_ether_vlan *vlan = reinterpret_cast<click_ether_vlan *>(q->data()+4);
 		vlan->ether_vlan_proto = htons(ETHERTYPE_8021Q);
 		vlan->ether_vlan_tci = tci;
 		q->set_mac_header(q->data(), sizeof(vlan));
-		cout << "[PacketIdEncap] push vlan tci succeed." << endl;
+		DEBUG_STDOUT(cout << "[PacketIdEncap] push vlan tci succeed." << endl);
 		return q;
+
 	} else {
 		cout << "[PacketIdEncap] Error: failed to push vlan tci: " << vlan_tci << endl;
 		return 0;
@@ -338,29 +329,27 @@ PacketIdEncap::pushVlanLayer(Packet *p, uint16_t vlan_tci)
 
 
 int PacketIdEncap::getHeadersLen(Packet *p) {
-	cout << "getHeadersLen" << endl;
+	DEBUG_STDOUT(cout << "getHeadersLen" << endl);
 
 	int headersLen = 0;
 	unsigned transport_header_len = 0;
 	const click_ip *iph = p->ip_header();
 
 	if (p->mac_header() == p->data()) {
-		cout << "getHeadersLen: network header wasn't set. Using default sizes!!" << endl;
+		DEBUG_STDOUT(cout << "getHeadersLen: network header wasn't set. Using default sizes!!" << endl);
 		return sizeof(click_ether) + sizeof(click_ip);
 	}
 
-//	if (!p->has_network_header()) {
-//		return -1;
-//	}
-
+#ifdef DEBUG
 	cout << "has transport? " << p->has_transport_header() << endl;
 
 	printf("data: %p, mac: %p, network: %p, transport: %p, end-data: %d", p->data(), p->mac_header(), p->network_header(), p->transport_header(), (p->end_data() - p->data()));
 	printf(", network_header_offset: %d", p->network_header_offset());
 	cout << endl;
+#endif
 
 	if (p->has_transport_header()) {
-
+#ifdef DEBUG
 		cout << "p->transport_header_offset(): " << unsigned(p->transport_header_offset()) << endl;
 		cout << "iph->ip_v: " << unsigned(iph->ip_v) << endl;
 		cout << "iph->ip_hl: " << unsigned(iph->ip_hl) << endl;
@@ -368,39 +357,43 @@ int PacketIdEncap::getHeadersLen(Packet *p) {
 		cout << "iph->ip_len: " << ntohs(iph->ip_len) << endl;
 		cout << "iph->ip_id: " << unsigned(iph->ip_id) << endl;
 		cout << "iph->ip_p: " << unsigned(iph->ip_p) << endl;
+#endif
 
 		if (iph->ip_p == IP_PROTO_TCP) {
-			cout << "tcp packet" << endl;
+			DEBUG_STDOUT(cout << "tcp packet" << endl);
 			const click_tcp *tcph = p->tcp_header();
 			transport_header_len = tcph->th_off << 2;
+
 		} else if (iph->ip_p == IP_PROTO_UDP) {
-			cout << "udp packet" << endl;
+			DEBUG_STDOUT(cout << "udp packet" << endl);
 			const click_udp *udph = p->udp_header();
 			transport_header_len = ntohs(udph->uh_ulen);
+
 		} else {
-			cout << "ignoring packet header len. iph->ip_p = " << unsigned(iph->ip_p) << endl;
+			DEBUG_STDOUT(cout << "ignoring packet header len. iph->ip_p = " << unsigned(iph->ip_p) << endl);
 			return -1;
 		}
 
-		cout << "transport header offset: " << p->transport_header_offset() << ", transport header len: " << transport_header_len << endl;
+		DEBUG_STDOUT(cout << "transport header offset: " << p->transport_header_offset() << ", transport header len: " << transport_header_len << endl);
 	}
 
 	headersLen =  p->network_header_offset() + sizeof(click_ip) + transport_header_len;
-	cout << "headersLen: " << headersLen << endl;
+	DEBUG_STDOUT(cout << "headersLen: " << headersLen << endl);
 
 	return headersLen;
 }
 
 int PacketIdEncap::getPacketLen(Packet *p) {
-	cout << "getPacketLen" << endl;
+	DEBUG_STDOUT(cout << "getPacketLen" << endl);
+
 	int packetLen = p->end_data() - p->data();
-	cout << "packet len: " << packetLen << endl;
+	DEBUG_STDOUT(cout << "packet len: " << packetLen << endl);
 
 	return packetLen;
 }
 
 WrappedPacketData* PacketIdEncap::createWPD(Packet *p) {
-	cout << "fill wrapped packet data" << endl;
+	DEBUG_STDOUT(cout << "fill wrapped packet data" << endl);
 
 	int len;
 
@@ -414,9 +407,8 @@ WrappedPacketData* PacketIdEncap::createWPD(Packet *p) {
 		return NULL;
 	}
 
-	cout << "len is: " << len << endl;
+	DEBUG_STDOUT(cout << "len is: " << len << endl);
 
-	// todo note that upon building the packet we need to change it to unsigned char!!
 	const unsigned char *packetData = p->data();
 
 	WrappedPacketData* wpd = new WrappedPacketData;
@@ -425,30 +417,15 @@ WrappedPacketData* PacketIdEncap::createWPD(Packet *p) {
 	wpd->size = len;
 
 	unsigned char* data = new unsigned char[wpd->size];
-//	char data[wpd->size];
-//	memset(data, 0, wpd->size);
-//	cout << "sizeof(const unsigned char): " << sizeof(const unsigned char) << endl;
-//	cout << "sizeof(unsigned char): " << sizeof(unsigned char) << endl;
-//	cout << "sizeof(char): " << sizeof(char) << endl;
-
 	memcpy(data, packetData, wpd->size);
-//	for (int i=0; i< wpd->size; i++, packetData++) {
-//		cout << isprint(packetData[i]) << ",";
-//		cout << static_cast<unsigned>(packetData[i]) << endl;
-//		data[i] = packetData[i];
-//	}
-//	cout << endl;
-
-//	cout << "sizeof(char): " << sizeof(char) << ", sizeof(char*): " << sizeof(char*) << ", sizeof(unsigned char): " << sizeof(unsigned char) << ", sizeof(unsigned char*): " << sizeof(unsigned char*) << endl;
-
 	wpd->data = data;
 
-	cout << "done filling wrapped packet data" << endl;
+	DEBUG_STDOUT(cout << "done filling wrapped packet data" << endl);
 	return wpd;
 }
 
 void PacketIdEncap::sendToLogger(WrappedPacketData* wpd) {
-	cout << "PacketIdEncap::runTest" << endl;
+	DEBUG_STDOUT(cout << "PacketIdEncap::sendToLogger" << endl);
 
 	if (wpd == NULL) {
 		cout << "ERROR: wpd is null" << endl;
@@ -462,14 +439,13 @@ void PacketIdEncap::sendToLogger(WrappedPacketData* wpd) {
 	bool isSucceed = client->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
-		cout << "succeed to send" << endl;
+		DEBUG_STDOUT(cout << "succeed to send" << endl);
 	} else {
-		cout << "failed to send" << endl;
+		DEBUG_STDOUT(cout << "failed to send" << endl);
 	}
 
 }
 
-// done testing part
 
 
 Packet *
@@ -485,17 +461,17 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 
 	uint64_t unified = (innerVlan << 24) | (middleVlan << 12) | outerVlan;
 
-	cout << "unified id: " << unified << ", seqNum: " << nextSeqNum << ", inner: " << innerVlan << ", middle: " << middleVlan << ", outer: " << outerVlan << endl;
+	DEBUG_STDOUT(cout << "unified id: " << unified << ", seqNum: " << nextSeqNum << ", inner: " << innerVlan << ", middle: " << middleVlan << ", outer: " << outerVlan << endl);
 
 	Packet *q = pushVlanLayer(p, innerVlan);
 	q = pushVlanLayer(q, middleVlan);
 	q = pushVlanLayer(q, outerVlan);
 
 	SET_PACKID_ANNO(q, unified);
-    cout << "set packet id anno: " << PACKID_ANNO(q)  << endl;
+	DEBUG_STDOUT(cout << "set packet id anno: " << PACKID_ANNO(q)  << endl);
 
 	if (_isMasterMode) {
-		cout << "start running test..." << endl;
+		DEBUG_STDOUT(cout << "start handling packet - master mode..." << endl);
 		WrappedPacketData* wpd = createWPD(q);
 		sendToLogger(wpd);
 
@@ -503,28 +479,14 @@ PacketIdEncap::smaction(Packet *p)	// main logic - should be changed
 			delete wpd->data;
 			delete wpd;
 		}
-		cout << "done testing.." << endl;
+		DEBUG_STDOUT(cout << "done handling packet.." << endl);
+
 	} else {
-		cout << "Doesn't need to send packet to logger - slave mode" << endl;
+		DEBUG_STDOUT(cout << "Doesn't need to send packet to logger - slave mode" << endl);
 	}
 
 	return q;
 
-//	if (_use_anno)
-//	_ethh.ether_vlan_tci = VLAN_TCI_ANNO(p);
-//    if ((_ethh.ether_vlan_tci & htons(0x0FFF)) == _native_vlan) {
-//	if (WritablePacket *q = p->push_mac_header(sizeof(click_ether))) {
-//	    memcpy(q->data(), &_ethh, 12);
-//	    q->ether_header()->ether_type = _ethh.ether_vlan_encap_proto;
-//	    return q;
-//	} else
-//	    return 0;
-//    }
-//    if (WritablePacket *q = p->push_mac_header(sizeof(click_ether_vlan))) {
-//	memcpy(q->data(), &_ethh, sizeof(click_ether_vlan));
-//	return q;
-//    } else
-//	return 0;
 }
 
 
@@ -532,16 +494,16 @@ void
 PacketIdEncap::push(int, Packet *p)
 {
     if (Packet *q = smaction(p))
-	output(0).push(q);
+    	output(0).push(q);
 }
 
 Packet *
 PacketIdEncap::pull(int)
 {
     if (Packet *p = input(0).pull())
-	return smaction(p);
+    	return smaction(p);
     else
-	return 0;
+    	return 0;
 }
 
 

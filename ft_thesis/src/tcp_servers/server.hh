@@ -19,6 +19,16 @@
 #include <sys/socket.h>
 
 
+#define DEBUG true
+#define DEBUG_STDOUT(x) x
+
+//#ifdef DEBUG
+//	#define DEBUG_STDOUT(x) x
+//#else
+//	#define DEBUG_STDOUT(x)
+//#endif
+
+
 #define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
 #define NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX 7
 #define NUM_OF_DIGITS_FOR_COMMAND_PREFIX 1

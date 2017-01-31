@@ -77,21 +77,23 @@ public:
 };
 
 void DetLoggerClient::serializePalsManagerObject(int command, void* obj, char* serialized, int* len) {
-	cout << "[DetLoggerClient::serializePalsManagerObject] Start" << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerClient::serializePalsManagerObject] Start" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 
+#ifdef DEBUG
 	cout << "start serializing det_logger client" << endl;
 	cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
 	cout << ", packid: " << pm->getPacketId() << endl;
 	cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
 	cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
+#endif
 
 	PALSManager::serialize(pm, serialized, len);
-	cout << "[DetLoggerClient::serializePalsManagerObject] End" << endl;
+	DEBUG_STDOUT(cout << "[DetLoggerClient::serializePalsManagerObject] End" << endl);
 }
 
 void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
-	cout << "DetLoggerClient::serializeObject" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::serializeObject" << endl);
 
 	if (command == STORE_COMMAND_TYPE) {
 		serializePalsManagerObject(command, obj, serialized, len);
@@ -99,10 +101,10 @@ void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, 
 }
 
 void DetLoggerClient::handleReturnValue(int status, char* retVal, int len, int command, void* retValAsObj) {
-	cout << "DetLoggerClient::handleReturnValue" << endl;
+	DEBUG_STDOUT(cout << "DetLoggerClient::handleReturnValue" << endl);
 
 	if (status == 0 || command == STORE_COMMAND_TYPE || len <= 0) {
-		cout << "nothing to handle." << endl;
+		DEBUG_STDOUT(cout << "nothing to handle." << endl);
 	}
 }
 
@@ -139,8 +141,6 @@ DistributePacketRecords::configure(Vector<String> &conf, ErrorHandler *errh)
 	if (_isMasterMode) {
 		detLoggerClient = new DetLoggerClient(9095, "10.0.0.5");
 		detLoggerClient->connectToServer();
-
-		// todo slaveNotifierClient = ...
 	} else {
 		detLoggerClient = new DetLoggerClient(9095, "10.0.0.8");
 		detLoggerClient->connectToServer();
@@ -150,7 +150,7 @@ DistributePacketRecords::configure(Vector<String> &conf, ErrorHandler *errh)
 //	pthread_t t1;
 //	pthread_create(&t1, NULL, &DistributePacketRecords::print_message, NULL);
 
-	cout << "continue.." << endl;
+	cout << "Done configuration.." << endl;
 
 
 
@@ -184,8 +184,6 @@ int DistributePacketRecords::connectToServer(int port, char* address) {
 		cout << "ERROR: Could not create socket" << endl;
 	}
 
-	cout << "Socket created" << endl;
-
 	// activate keep-alive mechanism
 //	int val = 1;
 //	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
@@ -196,14 +194,14 @@ int DistributePacketRecords::connectToServer(int port, char* address) {
 		return -1;
 	}
 
-	cout<<"Connected\n";
+	cout<<"Connected successfully\n";
 
 	return sockfd;
 }
 
 
 void DistributePacketRecords::sendToLogger(void* pm) {
-	cout << "DistributePacketRecords::sendToLogger" << endl;
+	DEBUG_STDOUT(cout << "DistributePacketRecords::sendToLogger" << endl);
 
 	if (pm == NULL) {
 		cout << "ERROR: pm is null" << endl;
@@ -217,9 +215,9 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, STORE_COMMAND_TYPE, NULL);
 
 	if (isSucceed) {
-		cout << "succeed to send" << endl;
+		DEBUG_STDOUT(cout << "succeed to send" << endl);
 	} else {
-		cout << "failed to send" << endl;
+		DEBUG_STDOUT(cout << "failed to send" << endl);
 	}
 
 }
@@ -227,7 +225,8 @@ void DistributePacketRecords::sendToLogger(void* pm) {
 Packet *
 DistributePacketRecords::smactionMaster(Packet *p)
 {
-	cout << "start distributing packet records..." << endl;
+	DEBUG_STDOUT(cout << "start distributing packet records..." << endl);
+
 	PALSManager* pm =(PALSManager *)PALS_MANAGER_REFERENCE_ANNO(p);
 	pm->setMBId(_mbId);
 	pm->setPacketId(PACKID_ANNO(p));
@@ -235,14 +234,14 @@ DistributePacketRecords::smactionMaster(Packet *p)
 
 	gpal* newGPalsList = pm->getGPalList();
 	int test = newGPalsList[0].var_id;
-	cout << "gpal var id: " << test << "." << endl;
-	char* text = newGPalsList[0].val;
-	cout << "gpal val is: " << text << endl;
+	DEBUG_STDOUT(cout << "gpal var id: " << test << "." << endl);
 
+	char* text = newGPalsList[0].val;
+	DEBUG_STDOUT(cout << "gpal val is: " << text << endl);
 
 	sendToLogger(pm);
 	delete pm;
-	cout << "done distribution.." << endl;
+	DEBUG_STDOUT(cout << "done distribution.." << endl);
 
 	return p;
 }
@@ -250,7 +249,7 @@ DistributePacketRecords::smactionMaster(Packet *p)
 Packet *
 DistributePacketRecords::smactionSlave(Packet *p)
 {
-	cout << "Slave mode - sending only data to 'progress logger'" << endl;
+	DEBUG_STDOUT(cout << "Slave mode - sending only data to 'progress logger'" << endl);
 
 	PALSManager* pm = new PALSManager (_mbId, PACKID_ANNO(p));
 	pm->setGPalSize(0);
@@ -259,7 +258,7 @@ DistributePacketRecords::smactionSlave(Packet *p)
 
 	sendToLogger((void*)pm); //static_cast<void*>(&pm)
 	delete pm;
-	cout << "done distribution.." << endl;
+	DEBUG_STDOUT(cout << "done distribution.." << endl);
 
 	return NULL; // prevent the packet from be sent again (only master should send packets)
 }

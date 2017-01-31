@@ -62,49 +62,6 @@ class PacketIdEncap : public Element { public:
 	static int write_handler(const String &str, Element *e, void *user_data, ErrorHandler *errh) CLICK_COLD;
 };
 
-//class Test {
-//
-//};
-//class PacketLoggerClient : public Client {
-//
-//protected:
-//	void serializeObject(void* obj, char* serialized, int* len);
-//
-//public:
-//	PacketLoggerClient(int port, char* address) : Client(port, address) {
-//		// do nothing
-//	}
-// };
-//
-//void PacketLoggerClient::serializeObject(void* obj, char* serialized, int* len) {
-////	click_chatter("PacketLoggerClient::serializeObject");
-////	cout << "PacketLoggerClient::serializeObject" << endl;
-//	WrappedPacketData* wpd = (WrappedPacketData*)obj;
-//	uint16_t size = wpd->size;
-//
-//	uint64_t *q = (uint64_t*)serialized;
-//	*q = wpd->packetId;
-//	q++;
-//
-//	uint16_t *p = (uint16_t*)q;
-//	*p = wpd->offset;
-//	p++;
-//
-//	*p = size;
-//	p++;
-//
-//	char *r = (char*)p;
-//
-//	for (int i=0; i< size; i++, r++) {
-//		*r = wpd->data[i];
-//	}
-//
-//	*len = sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint16_t) + (sizeof(char) * size);
-//
-////	cout << "len is: " << *len << endl;
-////	click_chatter("len is: %d", *len);
-//}
-
 CLICK_ENDDECLS
 
 #endif /* PACKETIDENCAP_PACKETIDENCAP_HH_ */
