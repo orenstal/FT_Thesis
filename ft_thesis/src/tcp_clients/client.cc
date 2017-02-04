@@ -39,8 +39,8 @@ void Client::connectToServer() {
 	}
 
 	// activate keep-alive mechanism
-//	int val = 1;
-//	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
+	int val = 1;
+	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
 
 	//Connect to remote server
 	if (connect(sockfd , (struct sockaddr *)&sock_addr_server , sizeof(sock_addr_server)) < 0) {
