@@ -149,6 +149,8 @@ void DetLoggerClient::runTests(char* address) {
 	inputs = prepareGetPalsTest(2, 331);
 	getPals(client, inputs);
 	delete (char*)inputs;
+
+	delete client;
 }
 
 PALSManager* DetLoggerClient::prepareDetLoggerTest1() {

@@ -78,6 +78,7 @@ private:
 
 	void deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToRemove, ServerProgressData* spd);
 	void deletePacketFromMbData(mbDataMap *mbData, uint64_t packetToRemove);
+	void freePacketData(PacketData* packetData);
 
 protected:
 	void* deserializeClientRequest(int command, char* msg, int msgLen);
@@ -195,6 +196,7 @@ bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retVal
 
 	DEBUG_STDOUT(cout << "retValLen: " << *retValLen << endl);
 
+	delete pm;
 	return true;
 }
 
@@ -249,14 +251,45 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToR
 		deletePacketFromMbData(mbData, packetToRemove);
 	}
 
-	for (int i=totalPacketsToRemove; i< spd->index; i++) {
-		spd->packet_ids_vector[i-totalPacketsToRemove] = spd->packet_ids_vector[i];
-	}
+	// todo I can reduce the memory consumption by using: http://stackoverflow.com/questions/7351899/remove-first-n-elements-from-a-stdvector
 
+	// erase the first totalPacketsToRemove packet ids
+	spd->packet_ids_vector.erase(spd->packet_ids_vector.begin(), spd->packet_ids_vector.begin() + totalPacketsToRemove);
 	spd->index -= totalPacketsToRemove;
 
 	DEBUG_STDOUT(cout << "spd->index after: " << spd->index << endl);
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] End" << endl);
+}
+
+void DetLoggerServer::freePacketData(PacketData* packetData) {
+	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] Start" << endl);
+	if (packetData == NULL) {
+		DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] End (packetData is null)" << endl);
+		return;
+	}
+
+	vector<gpal*>* gp_vector = &(packetData->gpal_vector);
+	vector<spal*>* sp_vector = &(packetData->spal_vector);
+
+	if (gp_vector != NULL) {
+		for (int i=0; i< packetData->gpal_index; i++) {
+			delete gp_vector->at(i);
+			gp_vector->at(i) = NULL;
+		}
+	}
+	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] gpals were freed" << endl);
+
+	if (sp_vector != NULL) {
+		for (int i=0; i< packetData->spal_index; i++) {
+			delete sp_vector->at(i);
+			sp_vector->at(i) = NULL;
+		}
+	}
+	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] spals were freed" << endl);
+
+	delete packetData;
+
+	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] Start" << endl);
 }
 
 
@@ -269,7 +302,8 @@ void DetLoggerServer::deletePacketFromMbData(mbDataMap *mbData, uint64_t packetT
 		if (mbData->find(packetToRemove) != mbData->end()) {
 			DEBUG_STDOUT(cout << "packetToRemove: " << packetToRemove << endl);
 			PacketData *packetData = mbData->at(packetToRemove);
-			delete packetData;
+
+			freePacketData(packetData);
 			mbData->erase(packetToRemove);
 		}
 	}
@@ -492,5 +526,7 @@ int main(int argc, char *argv[])
 	DetLoggerServer *server = new DetLoggerServer(PORT);
 	server->init();
 	server->run();
+
+	delete server;
 	return 0;
 }

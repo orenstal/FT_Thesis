@@ -279,6 +279,8 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command, void* ret
 		handleReturnValue(status, retVal+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS, retValLen, command, retValAsObj);
 	}
 
+	delete retVal;
+
 	return true;
 }
 

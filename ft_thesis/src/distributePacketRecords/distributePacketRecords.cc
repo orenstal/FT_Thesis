@@ -1,12 +1,14 @@
 /*
- * packetIdEncap.cc
+ * DistributePacketRecords.cc
  *
  *  Created on: Nov 26, 2016
  *      Author: Tal
  */
 
 /*
- * ethervlanencap.{cc,hh} -- encapsulates packet in Ethernet header
+ * DistributePacketRecords.{cc,hh} -- On master mode: distribute packet records (Spals and Gpals)
+ * to det logger server and update progress logger.
+ * On slave mode: update progress logger only.
  *
  * Copyright (c) 2000 Massachusetts Institute of Technology
  * Copyright (c) 2010 Intel Corporation
@@ -259,6 +261,10 @@ DistributePacketRecords::smactionSlave(Packet *p)
 	sendToLogger((void*)pm); //static_cast<void*>(&pm)
 	delete pm;
 	DEBUG_STDOUT(cout << "done distribution.." << endl);
+
+	// free the memory of the pm that is created by PreparePacket.cc::getPals.
+	PALSManager* mbPm =(PALSManager *)PALS_MANAGER_REFERENCE_ANNO(p);
+	delete mbPm;
 
 	return NULL; // prevent the packet from be sent again (only master should send packets)
 }

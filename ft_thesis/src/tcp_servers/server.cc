@@ -185,7 +185,7 @@ void Server::handleClientRequestThread(int sockfd) {
 	char* msg = new char[SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 	int msgLen;	// msgLen doesn't include the command chars (as well as the msgLen digits themselves)
 	int command;
-	char* retVal = new char[MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
+	char* retVal = NULL;
 	int retValLen = 0;
 
 	readCommonClientRequest(sockfd, msg, &msgLen, &command);
@@ -197,10 +197,13 @@ void Server::handleClientRequestThread(int sockfd) {
 		return;
 	}
 
+
 	// for debug usage
 #ifdef DEBUG
 	printMsg(msg, msgLen);
 #endif
+
+	retVal = new char[MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 
 	// now we have msg and msgLen.
 	void* obj = deserializeClientRequest(command, msg+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX, msgLen);
@@ -209,6 +212,7 @@ void Server::handleClientRequestThread(int sockfd) {
 	writeResponseToClient(sockfd, retStatus, retVal, retValLen);
 
 	delete msg;
+	delete retVal;
 	freeDeserializedObject(obj, command);
 
 	// relevant when using multi-threading

@@ -15,6 +15,7 @@
 #include "client.hh"
 #include "../common/wrappedPacketData/wrapped_packet_data.hh"
 #include "../common/replayPackets/replay_packets.hh"
+#include "../common/deletePackets/delete_packets.hh"
 
 #define DEBUG_LISTEN_TO_PORT 5556
 #define DEBUG_LISTEN_TO_ADDRESS "127.0.0.1"
@@ -23,6 +24,7 @@
 #define STORE_COMMAND_TYPE 0
 #define GET_PACKET_BY_PACKID_COMMAND_TYPE 1
 #define REPLAY_PACKETS_BY_IDS_COMMAND_TYPE 2
+#define DELETE_PACKETS_BY_IDS_COMMAND_TYPE 3
 
 using namespace std;
 
@@ -33,6 +35,7 @@ private:
 	void serializeWrappedPacketDataObject(int command, void* obj, char* serialized, int* len);
 	void serializeGetPacketById(int command, void* obj, char* serialized, int* len);
 	void serializeReplayPacketsByIds(int command, void* obj, char* serialized, int* len);
+	void serializeDeletePacketsByIds(int command, void* obj, char* serialized, int* len);
 
 	// mocked client for debug
 	static WrappedPacketData* preparePacketLoggerClientTest1();
@@ -46,7 +49,10 @@ private:
 	static void* prepareReplayPacketsTest2();
 	static void* prepareReplayPacketsTest3();
 	static void* prepareReplayPacketsTest4();
+	static void* prepareDeletePacketsTest1();
+	static void* prepareDeletePacketsTest2();
 	static void replayPackets(PacketLoggerClient *client, void* msgToSend);
+	static void deletePackets(PacketLoggerClient *client, void* msgToSend);
 	// end mocked client
 
 

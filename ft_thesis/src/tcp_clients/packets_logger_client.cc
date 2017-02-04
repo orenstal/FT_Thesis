@@ -78,6 +78,21 @@ void PacketLoggerClient::serializeReplayPacketsByIds(int command, void* obj, cha
 	*len = 2*sizeof(uint16_t) + sizeof(uint8_t) + MAX_ADDRESS_LEN + vec->size()*sizeof(uint64_t);
 }
 
+void PacketLoggerClient::serializeDeletePacketsByIds(int command, void* obj, char* serialized, int* len) {
+	DeletePackets* deletePacketsData = (DeletePackets*) obj;
+
+	uint64_t* vecInput = (uint64_t*)serialized;
+
+	vector<uint64_t>* vec = deletePacketsData->packetIds;
+	for (int i=0; i< vec->size(); i++) {
+		DEBUG_STDOUT(cout << "[" << i << "] = " << (*vec)[i] << endl);
+		*vecInput = (*vec)[i];
+		vecInput++;
+	}
+
+	*len = vec->size()*sizeof(uint64_t);
+}
+
 
 
 void PacketLoggerClient::serializeObject(int command, void* obj, char* serialized, int* len) {
@@ -89,6 +104,8 @@ void PacketLoggerClient::serializeObject(int command, void* obj, char* serialize
 		serializeGetPacketById(command, obj, serialized, len);
 	} else if (command == REPLAY_PACKETS_BY_IDS_COMMAND_TYPE) {
 		serializeReplayPacketsByIds(command, obj, serialized, len);
+	} else if (command == DELETE_PACKETS_BY_IDS_COMMAND_TYPE) {
+		serializeDeletePacketsByIds(command, obj, serialized, len);
 	}
 }
 
@@ -106,6 +123,8 @@ void PacketLoggerClient::handleReturnValue(int status, char* retVal, int len, in
 		DEBUG_STDOUT(cout << "returnedPacket: " << *returnedPacket << endl);
 	} else if (command == REPLAY_PACKETS_BY_IDS_COMMAND_TYPE) {
 		DEBUG_STDOUT(cout << "received ack for packet replaying." << endl);
+	} else if (command == DELETE_PACKETS_BY_IDS_COMMAND_TYPE) {
+		DEBUG_STDOUT(cout << "nothing to handle." << endl);
 	}
 }
 
@@ -157,22 +176,40 @@ void PacketLoggerClient::runTests(char* address) {
 	cout << "\nstart replaying packets 195 and 225..." << endl;
 	inputs = prepareReplayPacketsTest1();
 	replayPackets(client, inputs);
+	delete ((ReplayPackets*)inputs)->packetIds;
 	delete (ReplayPackets*)inputs;
 
 	cout << "\nstart replaying packet 225..." << endl;
 	inputs = prepareReplayPacketsTest2();
 	replayPackets(client, inputs);
+	delete ((ReplayPackets*)inputs)->packetIds;
 	delete (ReplayPackets*)inputs;
 
 	cout << "\nstart replaying packets 193, 195 and 225..." << endl;
 	inputs = prepareReplayPacketsTest3();
 	replayPackets(client, inputs);
+	delete ((ReplayPackets*)inputs)->packetIds;
 	delete (ReplayPackets*)inputs;
 
 	cout << "\nstart replaying empty packet list..." << endl;
 	inputs = prepareReplayPacketsTest4();
 	replayPackets(client, inputs);
+	delete ((ReplayPackets*)inputs)->packetIds;
 	delete (ReplayPackets*)inputs;
+
+	cout << "\nstart deleting packet 193, 225... (193 shouldn't be deleted)" << endl;
+	inputs = prepareDeletePacketsTest1();
+	deletePackets(client, inputs);
+	delete ((DeletePackets*)inputs)->packetIds;
+	delete (DeletePackets*)inputs;
+
+	cout << "\nstart deleting packet 195, 193, 225..." << endl;
+	inputs = prepareDeletePacketsTest2();
+	deletePackets(client, inputs);
+	delete ((DeletePackets*)inputs)->packetIds;
+	delete (DeletePackets*)inputs;
+
+	delete client;
 }
 
 
@@ -298,6 +335,9 @@ void PacketLoggerClient::getPacket(PacketLoggerClient *client, void* msgToSend) 
 	}
 
 	cout << "retValAsObj is: " << retValAsObj << endl;
+
+	if (retValAsObj != NULL)
+		delete retValAsObj;
 }
 
 void* PacketLoggerClient::prepareReplayPacketsTest1() {
@@ -365,6 +405,31 @@ void* PacketLoggerClient::prepareReplayPacketsTest4() {
 	return (void*)input;
 }
 
+void* PacketLoggerClient::prepareDeletePacketsTest1() {
+	cout << "preparing delete packets test 1" << endl;
+
+	DeletePackets* input = new DeletePackets;
+	input->packetIds = new vector<uint64_t>;
+
+	input->packetIds->push_back(193);
+	input->packetIds->push_back(225);
+
+	return (void*)input;
+}
+
+void* PacketLoggerClient::prepareDeletePacketsTest2() {
+	cout << "preparing delete packets test 2" << endl;
+
+	DeletePackets* input = new DeletePackets;
+	input->packetIds = new vector<uint64_t>;
+
+	input->packetIds->push_back(195);
+	input->packetIds->push_back(193);
+	input->packetIds->push_back(225);
+
+	return (void*)input;
+}
+
 void PacketLoggerClient::replayPackets(PacketLoggerClient *client, void* msgToSend) {
 
 	char serialized[SERVER_BUFFER_SIZE];
@@ -380,3 +445,21 @@ void PacketLoggerClient::replayPackets(PacketLoggerClient *client, void* msgToSe
 		cout << "failed to send" << endl;
 	}
 }
+
+void PacketLoggerClient::deletePackets(PacketLoggerClient *client, void* msgToSend) {
+
+	char serialized[SERVER_BUFFER_SIZE];
+	int len;
+	char* retValAsObj = NULL;
+
+	client->prepareToSend(msgToSend, serialized, &len, DELETE_PACKETS_BY_IDS_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, DELETE_PACKETS_BY_IDS_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
+
+	if (isSucceed) {
+		cout << "succeed to send" << endl;
+	} else {
+		cout << "failed to send" << endl;
+	}
+}
+
+

@@ -21,6 +21,7 @@
 #include "det_logger_client.hh"
 #include "packets_logger_client.hh"
 #include "../common/replayPackets/replay_packets.hh"
+#include "../common/deletePackets/delete_packets.hh"
 #include "client.hh"
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -79,14 +80,17 @@ private:
 	ReplayPackets* createReplayPackets(MbData* slaveData, vector<uint64_t>* unporcessedPacketIds);
 	void sendReplayPacketsRequest(PacketLoggerClient *client, ReplayPackets* replayPacketsData);
 
+	DeletePackets* createDeletePacketsData(vector<uint64_t>* packetIdsToDelete);
+	void sendDeletePacketsPacketsRequest(PacketLoggerClient *client, DeletePackets* deletePacketsData);
+
 	int connectToPacketLoggerServer(char* mbAddress, int mbPort);
-	bool sendMsgToDstMb(int destMbSockfd, char* msgToSend, int length); // todo to be removed
 
 	void deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, uint32_t totalFirstPacketsToBeDeleted);
 
 public:
 	Manager();
 	void init();
+	void freeMbData();
 	bool replay(uint16_t masterMbId);
 	bool clearReplayedPackets(uint16_t masterMbId);
 
@@ -118,6 +122,11 @@ void Manager::init() {
 
 }
 
+void Manager::freeMbData() {
+	delete mbData[1];
+	delete mbData[2];
+}
+
 bool Manager::replay(uint16_t masterMbId) {
 	printf("[Manager::replay] Start\n");
 
@@ -147,6 +156,11 @@ bool Manager::replay(uint16_t masterMbId) {
 
 	DEBUG_STDOUT(printf("about to delete replayPackets\n"););
 	delete replayPackets;
+	delete masterProcessedPacketIds;
+	delete slaveProcessedPacketIds;
+	delete detLoggerClient;
+	delete slaveDetLoggerClient;
+	delete packetLoggerClient;
 
 	printf("[Manager::replay] End\n");
 
@@ -168,7 +182,8 @@ bool Manager::clearReplayedPackets(uint16_t masterMbId) {
 
 	DetLoggerClient *detLoggerClient = new DetLoggerClient(DET_LOGGER_SERVER_PORT, DET_LOGGER_SERVER_ADDRESS);
 	DetLoggerClient *slaveDetLoggerClient = new DetLoggerClient(DET_LOGGER_SERVER_PORT, DET_LOGGER_SLAVE_SERVER_ADDRESS);
-	connectToServersForRecovery(detLoggerClient, slaveDetLoggerClient, NULL);
+	PacketLoggerClient *packetLoggerClient = new PacketLoggerClient(PACKET_LOGGER_SERVER_PORT, PACKET_LOGGER_SERVER_ADDRESS);
+	connectToServersForRecovery(detLoggerClient, slaveDetLoggerClient, packetLoggerClient);
 
 	vector<uint64_t>* masterProcessedPacketIds = Manager::getProcessedPacketIds(detLoggerClient, &masterMbId);
 
@@ -179,7 +194,17 @@ bool Manager::clearReplayedPackets(uint16_t masterMbId) {
 	deleteFirstPacketsRequest(detLoggerClient, masterMbId, commonPorcessedPacketIds->size());
 	deleteFirstPacketsRequest(slaveDetLoggerClient, slaveMbId, commonPorcessedPacketIds->size());
 
+	DeletePackets* deletePacketsData = createDeletePacketsData(commonPorcessedPacketIds);
+	sendDeletePacketsPacketsRequest(packetLoggerClient, deletePacketsData);
+
 	printf("[Manager::clearReplayedPackets] End\n");
+
+	delete deletePacketsData;
+	delete masterProcessedPacketIds;
+	delete slaveProcessedPacketIds;
+	delete detLoggerClient;
+	delete slaveDetLoggerClient;
+	delete packetLoggerClient;
 
 	return true;
 }
@@ -221,59 +246,6 @@ int Manager::connectToPacketLoggerServer(char* serverAddress, int serverPort) {
 	return sockfd;
 }
 
-bool Manager::sendMsgToDstMb(int packetLoggerServerSockfd, char* msgToSend, int length) {
-#ifdef DEBUG
-	printf("in sendMsg.. length: %d, msg:", length);
-
-	// print message content
-	for(int i=0; i< length; i++) {
-		printf("%c", msgToSend[i]);
-	}
-
-	printf("\n");
-#endif
-
-
-	int totalSentBytes = 0;
-
-	if (length > SERVER_BUFFER_SIZE) {
-		printf("ERROR: can't send message that is longer than %d\n", SERVER_BUFFER_SIZE);
-		return false;
-	}
-
-	// Write the message to the server
-	while (totalSentBytes < length) {
-		DEBUG_STDOUT(printf("sending..\n"));
-
-		int ret = send(packetLoggerServerSockfd, msgToSend, length - totalSentBytes, 0);
-
-		if (ret == 0) {
-			printf("ERROR: The server is terminated. exit..\n");
-			return false;
-		}
-
-		if (ret < 0) {
-			// trying to send one more time after failing the first time
-			ret = send(packetLoggerServerSockfd, msgToSend, length - totalSentBytes, 0);
-
-			if (ret == 0) {
-				printf("ERROR: The server is terminated. exit..\n");
-				return false;
-			}
-
-			if (ret < 0) {
-				return false;
-			}
-		}
-
-		totalSentBytes += ret;
-		msgToSend += ret;
-	}
-
-	DEBUG_STDOUT(printf("totalSentBytes: %d\n", totalSentBytes));
-	return true;
-
-}
 
 void Manager::sendReplayPacketsRequest(PacketLoggerClient *client, ReplayPackets* replayPacketsData) {
 	DEBUG_STDOUT(printf("[Manager::sendReplayPacketsRequest] Start\n"));
@@ -341,6 +313,53 @@ ReplayPackets* Manager::createReplayPackets(MbData* slaveData, vector<uint64_t>*
 
 	return replayPackets;
 }
+
+DeletePackets* Manager::createDeletePacketsData(vector<uint64_t>* packetIdsToDelete) {
+	DEBUG_STDOUT(printf("[Manager::createDeletePacketsData] Start\n"));
+
+	DeletePackets* deletePacketsData = new DeletePackets;
+	deletePacketsData->packetIds = packetIdsToDelete;
+
+	if (packetIdsToDelete == NULL) {
+		DEBUG_STDOUT(printf("WARNING: deletePacketsData->packetIds is NULL !!\n"));
+	}
+
+#ifdef DEBUG
+	printf("packetIdsToDelete size is: %d", packetIdsToDelete->size());
+	printf("size is: %d", deletePacketsData->packetIds->size());
+	printf("packet ids are: \n");
+
+	for (int i=0; i<deletePacketsData->packetIds->size(); i++) {
+		printf("%" PRIu64 ", ", deletePacketsData->packetIds->at(i));
+	}
+
+	printf("\n");
+	printf("[Manager::createDeletePacketsData] End\n");
+	fflush(stdout);
+#endif
+
+	return deletePacketsData;
+}
+
+
+void Manager::sendDeletePacketsPacketsRequest(PacketLoggerClient *client, DeletePackets* deletePacketsData) {
+	DEBUG_STDOUT(printf("[Manager::sendDeletePacketsPacketsRequest] Start\n"));
+
+	char serialized[SERVER_BUFFER_SIZE];
+	int len;
+	char* retValAsObj = NULL;
+
+	client->prepareToSend((void*)deletePacketsData, serialized, &len, DELETE_PACKETS_BY_IDS_COMMAND_TYPE);
+	bool isSucceed = client->sendMsgAndWait(serialized, len, DELETE_PACKETS_BY_IDS_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
+
+	if (isSucceed) {
+		DEBUG_STDOUT(cout << "succeed to send" << endl);
+	} else {
+		DEBUG_STDOUT(cout << "failed to send" << endl);
+	}
+	DEBUG_STDOUT(printf("[Manager::sendDeletePacketsPacketsRequest] End\n"));
+}
+
 
 // Erase from the master vector all the packets ids that are processed by the slave
 vector<uint64_t>* Manager::getUnprocessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
@@ -420,10 +439,8 @@ void Manager::connectToServersForRecovery(DetLoggerClient *detLoggerClient, DetL
 
 	detLoggerClient->connectToServer();
 	slaveDetLoggerClient->connectToServer();
+	packetLoggerClient->connectToServer();
 
-	if (packetLoggerClient != NULL) {
-		packetLoggerClient->connectToServer();
-	}
 
 	printf("done connecting to servers...\n");
 }
@@ -543,6 +560,9 @@ int main(int argc, char *argv[])
 				break;
 			}
 		}
+
+		manager->freeMbData();
+		delete manager;
 
 	} else if (*argv[1] == 'd') {
 		DetLoggerClient::runTests(address);

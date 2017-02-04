@@ -8,6 +8,7 @@
 #include "server.hh"
 #include "../common/wrappedPacketData/wrapped_packet_data.hh"
 #include "../common/replayPackets/replay_packets.hh"
+#include "../common/deletePackets/delete_packets.hh"
 #include <map>
 #include <vector>
 #include <algorithm>
@@ -25,6 +26,7 @@
 #define STORE_COMMAND_TYPE 0
 #define GET_PACKET_BY_PACKID_COMMAND_TYPE 1
 #define REPLAY_PACKETS_BY_IDS_COMMAND_TYPE 2
+#define DELETE_PACKETS_BY_IDS_COMMAND_TYPE 3
 
 
 using namespace std;
@@ -62,11 +64,14 @@ private:
 
 	void* deserializeClientStoreRequest(int command, char* msg, int msgLen);
 	void* deserializeClientReplayRequest(int command, char* msg, int msgLen);
+	void* deserializeClientDeletePacketsRequest(int command, char* msg, int msgLen);
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 	bool processGetPacketByIdRequest(void* obj, char* retVal, int* retValLen);
 	bool processReplayRequest(void* obj, char* retVal, int* retValLen);
+	bool processDeletePacketsRequest(void* obj, char* retVal, int* retValLen);
 
 	bool getPacket(uint64_t packId, unsigned char* retVal, int* retValLen);
+	bool deletePacket(uint64_t packId);
 	int connectTodestMb(char* mbAddress, int mbPort);
 	bool sendMsgToDstMb(int destMbSockfd, char* msgToSend, int length);
 
@@ -149,6 +154,34 @@ void* PacketLoggerServer::deserializeClientReplayRequest(int command, char* msg,
 	return (void*)replayData;
 }
 
+void* PacketLoggerServer::deserializeClientDeletePacketsRequest(int command, char* msg, int msgLen) {
+	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientDeletePacketsRequest" << endl);
+
+	DeletePackets* deletePacketsData = new DeletePackets;
+	deletePacketsData->packetIds = new vector<uint64_t>;
+
+	int vectorLen = msgLen;
+	int totalNumOfPacketIdsToDelete = vectorLen / sizeof(uint64_t);
+
+	DEBUG_STDOUT(cout << "vectorLen: " << vectorLen << ", totalNumOfPacketIdsToDelete: " << totalNumOfPacketIdsToDelete << endl);
+
+	uint64_t *v = (uint64_t*)msg;
+
+	for (int i=0; i<totalNumOfPacketIdsToDelete; i++) {
+		deletePacketsData->packetIds->push_back(v[i]);
+	}
+
+#ifdef DEBUG
+	cout << "deletePacketsData: vector: "<< endl;
+
+	for (int i=0; i< deletePacketsData->packetIds->size(); i++) {
+		cout << "[" << i << "] = " << (*deletePacketsData->packetIds)[i] << endl;
+	}
+#endif
+
+	return (void*)deletePacketsData;
+}
+
 
 void* PacketLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
 	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl);
@@ -159,6 +192,8 @@ void* PacketLoggerServer::deserializeClientRequest(int command, char* msg, int m
 		return (void*)msg;
 	} else if (command == REPLAY_PACKETS_BY_IDS_COMMAND_TYPE){
 		return deserializeClientReplayRequest(command, msg, msgLen);
+	} else if (command == DELETE_PACKETS_BY_IDS_COMMAND_TYPE) {
+		return deserializeClientDeletePacketsRequest(command, msg, msgLen);
 	}
 
 	return NULL;
@@ -246,6 +281,38 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 	return true;
 }
 
+bool PacketLoggerServer::processDeletePacketsRequest(void* obj, char* retVal, int* retValLen) {
+	DEBUG_STDOUT(cout << "ProgressLoggerServer::processDeletePacketsRequest" << endl);
+
+#ifdef DEBUG
+	DEBUG_STDOUT(cout << "state before:" << endl);
+	printState();
+#endif
+
+	DeletePackets* deletePacketsData = (DeletePackets*)obj;
+	vector<uint64_t>* packetsToDelete = deletePacketsData->packetIds;
+
+	DEBUG_STDOUT(cout << "packetsToDelete.size: " << packetsToDelete->size() << endl);
+
+	for (int i=0; i<packetsToDelete->size(); i++) {
+		uint64_t packId = (*packetsToDelete)[i];
+		DEBUG_STDOUT(cout << "About to delete packet id: " << packId << endl);
+		deletePacket(packId);
+	}
+
+#ifdef DEBUG
+	DEBUG_STDOUT(cout << "state after:" << endl);
+	printState();
+#endif
+
+	DEBUG_STDOUT(cout << "[ProgressLoggerServer::processDeletePacketsRequest] done" << endl);
+
+	// ack/nack will be sent anyway.
+	*retValLen = 0;
+
+	return true;
+}
+
 
 bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
 	DEBUG_STDOUT(cout << "command is: " << command << endl);
@@ -256,6 +323,8 @@ bool PacketLoggerServer::processRequest(void* obj, int command, char* retVal, in
 		return processGetPacketByIdRequest(obj, retVal, retValLen);
 	} else if (command == REPLAY_PACKETS_BY_IDS_COMMAND_TYPE) {
 		return processReplayRequest(obj, retVal, retValLen);
+	} else if (command == DELETE_PACKETS_BY_IDS_COMMAND_TYPE) {
+		return processDeletePacketsRequest(obj, retVal, retValLen);
 	}
 
 	return false;
@@ -298,19 +367,55 @@ bool PacketLoggerServer::getPacket(uint64_t packId, unsigned char* retVal, int* 
 	// todo basically this step is not necessary because the version order is kept.
 	sort(pvd.begin(), pvd.end(), spvdComparator);
 
-	// todo for debug usage
-//	SinglePacketVersionData* spvd = pvd[0];
-//	memcpy(retVal+(int)spvd->offset, spvd->data, (int)spvd->size);
-//	*retValLen = max(*retValLen, (int)spvd->size);
-	// end debug
-
-
 	for (uint8_t i=0; i<packetVersionsLen; i++) {
 		SinglePacketVersionData* spvd = pvd[i];
 		DEBUG_STDOUT(cout << "i: " << unsigned(i) << ", version: " << unsigned(spvd->version) << ". About to copy data of size: " << spvd->size << ", to offset: " << retVal+(int)spvd->offset <<  endl);
 		memcpy(retVal+(int)spvd->offset, spvd->data, (int)spvd->size);
 		*retValLen = max(*retValLen, (int)spvd->size);
 	}
+
+	return true;
+}
+
+bool PacketLoggerServer::deletePacket(uint64_t packId) {
+	DEBUG_STDOUT(cout << "PacketLoggerServer::deletePacket" << endl);
+
+	PacketVersionsData* packetVersions = NULL;
+
+	uint64_t packetIdBase = packId >> 5;
+	uint8_t packetVersion = packId & 31;
+
+	DEBUG_STDOUT(cout << "packet id base is: " << packetIdBase << ", packet version is: " << unsigned(packetVersion) << endl);
+
+	if (packetsVersions.find(packetIdBase) != packetsVersions.end()) {
+		DEBUG_STDOUT(cout << "packIdBase " << packetIdBase << " exist in packetsVersions" << endl);
+		packetVersions = packetsVersions[packetIdBase];
+	}
+
+	if (packetVersions == NULL) {
+		DEBUG_STDOUT(cout << "WARNING: received packet id doesn't exist!!" << endl);
+		return true;
+	}
+
+	uint8_t packetVersionsLen = packetVersions->index;
+	DEBUG_STDOUT(cout << "packetVersionsLen: " << unsigned(packetVersionsLen) << endl);
+
+	if (packetVersion < packetVersionsLen) {
+		DEBUG_STDOUT(cout << "WARNING: We can't delete partial packet versions." << endl);
+		return false;
+	}
+
+	vector<SinglePacketVersionData*>* pvd = &(packetVersions->packet_versions);
+
+	for (uint8_t i=0; i<packetVersionsLen; i++) {
+		SinglePacketVersionData* spvd = pvd->at(i);
+		delete spvd->data;
+		delete spvd;
+	}
+	pvd->clear();
+
+	delete packetVersions;
+	packetsVersions.erase(packetIdBase);
 
 	return true;
 }
@@ -395,7 +500,12 @@ void PacketLoggerServer::freeDeserializedObject(void* obj, int command) {
 		// do nothing
 	} else if (command == REPLAY_PACKETS_BY_IDS_COMMAND_TYPE){
 		ReplayPackets* replayPacket = (ReplayPackets*)obj;
+		delete replayPacket->packetIds;
 		delete replayPacket;
+	} else if (command == DELETE_PACKETS_BY_IDS_COMMAND_TYPE) {
+		DeletePackets* deletePacketsData = (DeletePackets*)obj;
+		delete deletePacketsData->packetIds;
+		delete deletePacketsData;
 	}
 }
 
@@ -498,6 +608,8 @@ int main(int argc, char *argv[])
 	PacketLoggerServer *server = new PacketLoggerServer(PORT);
 	server->init();
 	server->run();
+
+	delete server;
 	return 0;
 }
 
