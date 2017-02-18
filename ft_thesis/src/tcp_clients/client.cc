@@ -10,10 +10,10 @@
 using namespace std;
 
 // todo for click usage. Comment for local interface.
-//#include <click/config.h>
-//#include <click/args.hh>
-//#include <click/glue.hh>
-//CLICK_DECLS
+#include <click/config.h>
+#include <click/args.hh>
+#include <click/glue.hh>
+CLICK_DECLS
 
 
 Client::Client(int port, char* address) {
@@ -25,11 +25,11 @@ Client::Client(int port, char* address) {
 	sockfd = -1;
 
 	printf("is debug Mode?\n");
-	#ifdef DEBUG
-	printf("Yes\n");
-	#else
-	printf("No\n");
-	#endif
+	if (DEBUG) {
+		printf("Yes\n");
+	} else {
+		printf("No\n");
+	}
 }
 
 void Client::connectToServer() {
@@ -101,16 +101,16 @@ void Client::prepareToSend(void* obj, char* serialized, int* len, int command) {
 }
 
 bool Client::sendMsg(char* serialized, int length) {
-#ifdef DEBUG
-	printf("in sendMsg.. length: %d, msg:", length);
+	if (DEBUG) {
+		printf("in sendMsg.. length: %d, msg:", length);
 
-	// print message content
-	for(int i=0; i< length; i++) {
-		printf("%c", serialized[i]);
+		// print message content
+		for(int i=0; i< length; i++) {
+			printf("%c", serialized[i]);
+		}
+
+		printf("\n");
 	}
-
-	printf("\n");
-#endif
 
 	int totalSentBytes = 0;
 
@@ -287,5 +287,5 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command, void* ret
 
 
 // todo for click usage.
-//CLICK_ENDDECLS
-//ELEMENT_PROVIDES(TCPClient)
+CLICK_ENDDECLS
+ELEMENT_PROVIDES(TCPClient)

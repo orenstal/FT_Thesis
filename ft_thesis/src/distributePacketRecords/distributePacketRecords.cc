@@ -82,13 +82,13 @@ void DetLoggerClient::serializePalsManagerObject(int command, void* obj, char* s
 	DEBUG_STDOUT(cout << "[DetLoggerClient::serializePalsManagerObject] Start" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 
-#ifdef DEBUG
-	cout << "start serializing det_logger client" << endl;
-	cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
-	cout << ", packid: " << pm->getPacketId() << endl;
-	cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
-	cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
-#endif
+	if (DEBUG) {
+		cout << "start serializing det_logger client" << endl;
+		cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
+		cout << ", packid: " << pm->getPacketId() << endl;
+		cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
+		cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
+	}
 
 	PALSManager::serialize(pm, serialized, len);
 	DEBUG_STDOUT(cout << "[DetLoggerClient::serializePalsManagerObject] End" << endl);

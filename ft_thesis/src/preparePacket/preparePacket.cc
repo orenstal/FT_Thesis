@@ -64,13 +64,13 @@ void DetLoggerPPClient::serializePalsManagerObject(int command, void* obj, char*
 	DEBUG_STDOUT(cout << "[DetLoggerPPClient::serializePalsManagerObject] Start" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 
-#ifdef DEBUG
-	cout << "start serializing det_logger client" << endl;
-	cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
-	cout << ", packid: " << pm->getPacketId() << endl;
-	cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
-	cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
-#endif
+	if (DEBUG) {
+		cout << "start serializing det_logger client" << endl;
+		cout << "serialized: " << serialized << ", len: " << *len << ", mbId: " << pm->getMBId() << endl;
+		cout << ", packid: " << pm->getPacketId() << endl;
+		cout << "pm->getGPalSize()" << pm->getGPalSize() << endl;
+		cout << "pm->getSPalSize()" << pm->getSPalSize() << endl;
+	}
 
 	PALSManager::serialize(pm, serialized, len);
 	DEBUG_STDOUT(cout << "[DetLoggerPPClient::serializePalsManagerObject] End" << endl);
@@ -108,7 +108,11 @@ void DetLoggerPPClient::handleGetPalsByMBIdAndPackIdResponse(int command, char* 
 	}
 
 	PALSManager::deserialize(retVal, pm);
-	pm->printContent();
+
+	if (DEBUG) {
+		pm->printContent();
+	}
+
 	*((PALSManager*)retValAsObj) = *pm;
 
 	DEBUG_STDOUT(cout << "[DetLoggerPPClient::handleGetPalsByMBIdAndPackIdResponse] done" << endl);
@@ -253,25 +257,25 @@ PreparePacket::smaction(Packet *p)	// main logic
 		//test
 		pm->createGPalAndAdd(1, "test\0");
 
-#ifdef DEBUG
-		gpal* newGPalsList = pm->getGPalList();
-		int test = newGPalsList[0].var_id;
-		cout << "gpal var id: " << test << "." << endl;
-		char* text = newGPalsList[0].val;
+		if (DEBUG) {
+			gpal* newGPalsList = pm->getGPalList();
+			int test = newGPalsList[0].var_id;
+			cout << "gpal var id: " << test << "." << endl;
+			char* text = newGPalsList[0].val;
 
-		cout << "gpal val is: " << text << endl;
-		cout << "done master mode" << endl;
-#endif
+			cout << "gpal val is: " << text << endl;
+			cout << "done master mode" << endl;
+		}
 
 	} else if (isSlave()) {
 		DEBUG_STDOUT(cout << "[slave mode] start getting pals for mbId: " << MASTER_MB_ID << ", packId: " << unifiedId << endl);
 		pm = (PALSManager*)getPals(unifiedId);
 
-#ifdef DEBUG
-		cout << "now pm is:" << endl;
-		pm->printContent();
-		cout << "done slave mode" << endl;
-#endif
+		if (DEBUG) {
+			cout << "now pm is:" << endl;
+			pm->printContent();
+			cout << "done slave mode" << endl;
+		}
 	}
 
 	SET_PALS_MANAGER_REFERENCE_ANNO(p, (uintptr_t)pm);

@@ -19,8 +19,8 @@
 #include <sys/socket.h>
 
 
-#define DEBUG true
-#define DEBUG_STDOUT(x) x
+#define DEBUG false
+#define DEBUG_STDOUT(x) //x
 
 //#ifdef DEBUG
 //	#define DEBUG_STDOUT(x) x
@@ -29,12 +29,12 @@
 //#endif
 
 
-#define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 5120	// 5k
+#define SERVER_BUFFER_SIZE_WITHOUT_PREFIX 300000
 #define NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX 7
 #define NUM_OF_DIGITS_FOR_COMMAND_PREFIX 1
 #define NUM_OF_DIGITS_FOR_RET_VAL_STATUS 1
 #define SERVER_BUFFER_SIZE SERVER_BUFFER_SIZE_WITHOUT_PREFIX+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_COMMAND_PREFIX
-#define MAX_RET_VAL_LENGTH 5120	// 5K
+#define MAX_RET_VAL_LENGTH 300000
 #define RESPONSE_STATE_SUCCESS "1"
 #define RESPONSE_STATE_FAILURE "0"
 using namespace std;
@@ -90,6 +90,7 @@ class Server {
 		Server(int port);
 		void init();
 		bool run();
+		void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr);
 };
 
 #endif /* TCP_SERVERS_SERVER_HH_ */

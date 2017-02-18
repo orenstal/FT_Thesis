@@ -13,8 +13,8 @@
 #include <string.h>
 #include <iostream>
 
-#define DEBUG true
-#define DEBUG_STDOUT(x) x
+#define DEBUG false
+#define DEBUG_STDOUT(x) //x
 
 //#ifdef DEBUG
 //	#define DEBUG_STDOUT(x) x

@@ -340,24 +340,24 @@ int PacketIdEncap::getHeadersLen(Packet *p) {
 		return sizeof(click_ether) + sizeof(click_ip);
 	}
 
-#ifdef DEBUG
-	cout << "has transport? " << p->has_transport_header() << endl;
+	if (DEBUG) {
+		cout << "has transport? " << p->has_transport_header() << endl;
 
-	printf("data: %p, mac: %p, network: %p, transport: %p, end-data: %d", p->data(), p->mac_header(), p->network_header(), p->transport_header(), (p->end_data() - p->data()));
-	printf(", network_header_offset: %d", p->network_header_offset());
-	cout << endl;
-#endif
+		printf("data: %p, mac: %p, network: %p, transport: %p, end-data: %d", p->data(), p->mac_header(), p->network_header(), p->transport_header(), (p->end_data() - p->data()));
+		printf(", network_header_offset: %d", p->network_header_offset());
+		cout << endl;
+	}
 
 	if (p->has_transport_header()) {
-#ifdef DEBUG
-		cout << "p->transport_header_offset(): " << unsigned(p->transport_header_offset()) << endl;
-		cout << "iph->ip_v: " << unsigned(iph->ip_v) << endl;
-		cout << "iph->ip_hl: " << unsigned(iph->ip_hl) << endl;
-		cout << "and now..? " << unsigned(p->ip_header_length()) << endl;
-		cout << "iph->ip_len: " << ntohs(iph->ip_len) << endl;
-		cout << "iph->ip_id: " << unsigned(iph->ip_id) << endl;
-		cout << "iph->ip_p: " << unsigned(iph->ip_p) << endl;
-#endif
+		if (DEBUG) {
+			cout << "p->transport_header_offset(): " << unsigned(p->transport_header_offset()) << endl;
+			cout << "iph->ip_v: " << unsigned(iph->ip_v) << endl;
+			cout << "iph->ip_hl: " << unsigned(iph->ip_hl) << endl;
+			cout << "and now..? " << unsigned(p->ip_header_length()) << endl;
+			cout << "iph->ip_len: " << ntohs(iph->ip_len) << endl;
+			cout << "iph->ip_id: " << unsigned(iph->ip_id) << endl;
+			cout << "iph->ip_p: " << unsigned(iph->ip_p) << endl;
+		}
 
 		if (iph->ip_p == IP_PROTO_TCP) {
 			DEBUG_STDOUT(cout << "tcp packet" << endl);

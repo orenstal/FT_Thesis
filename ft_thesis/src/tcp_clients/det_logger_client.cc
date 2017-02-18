@@ -23,6 +23,19 @@ void DetLoggerClient::serializeGetPalsByMBIdAndPackId(int command, void* obj, ch
 	*len = sizeof(uint16_t) + sizeof(uint64_t);
 }
 
+void DetLoggerClient::serializeGetProcessedPackIdsByMBId(int command, void* obj, char* serialized, int* len) {
+	uint16_t* mbIdInput = (uint16_t*)obj;
+	uint16_t *q = (uint16_t*)serialized;
+	*q = *mbIdInput;
+	q++;
+	mbIdInput++;
+
+	bool *allVersionsInput = (bool*)mbIdInput;
+	bool *p = (bool*)q;
+	*p = *allVersionsInput;
+	*len = sizeof(uint16_t) + sizeof(bool);
+}
+
 void DetLoggerClient::serializeDeleteFirstPackets(int command, void* obj, char* serialized, int* len) {
 	uint16_t* mbIdInput = (uint16_t*)obj;
 	uint16_t *q = (uint16_t*)serialized;
@@ -42,9 +55,7 @@ void DetLoggerClient::serializeObject(int command, void* obj, char* serialized, 
 	if (command == STORE_COMMAND_TYPE) {
 		serializePalsManagerObject(command, obj, serialized, len);
 	} else if (command == GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE) {
-		uint16_t *q = (uint16_t*)serialized;
-		*q = *((uint16_t*)obj);
-		*len = sizeof(uint16_t);
+		serializeGetProcessedPackIdsByMBId(command, obj, serialized, len);
 	} else if (command == GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE) {
 		serializeGetPalsByMBIdAndPackId(command, obj, serialized, len);
 	} else if (command == DELETE_PACKETS_COMMAND_TYPE) {
@@ -124,19 +135,17 @@ void DetLoggerClient::runTests(char* address) {
 	delete pm1;
 
 	cout << "\nstart getting mb 1 processed packets..." << endl;
-	uint16_t* mbId = new uint16_t;
-	*mbId = 1;
-	getProcessedPacketIds(client, mbId);
-	delete mbId;
+	void* inputs = prepareGetProcessedPacketsTest(1, true);
+	getProcessedPacketIds(client, inputs);
+	delete (char*)inputs;
 
 	cout << "\nstart getting mb 2 processed packets..." << endl;
-	mbId = new uint16_t;
-	*mbId = 2;
-	getProcessedPacketIds(client, mbId);
-	delete mbId;
+	inputs = prepareGetProcessedPacketsTest(2, false);
+	getProcessedPacketIds(client, inputs);
+	delete (char*)inputs;
 
 	cout << "\nstart getting pals for mbId 1, packId 331..." << endl;
-	void* inputs = prepareGetPalsTest(1, 331);
+	inputs = prepareGetPalsTest(1, 331);
 	getPals(client, inputs);
 	delete (char*)inputs;
 
@@ -219,6 +228,20 @@ void* DetLoggerClient::prepareGetPalsTest(uint16_t mbId, uint64_t packId) {
 	return (void*)input;
 }
 
+void* DetLoggerClient::prepareGetProcessedPacketsTest(uint16_t mbId, bool allVersions) {
+	cout << "preparing get processed packets test for mbId: " << mbId << ", allVersions: " << allVersions << endl;
+
+	char* input = new char[sizeof(uint16_t)+sizeof(bool)+1];
+	uint16_t* mbIdInput = (uint16_t*)input;
+	*mbIdInput = mbId;
+	mbIdInput++;
+
+	bool* allVersionsInput = (bool*)mbIdInput;
+	*allVersionsInput = allVersions;
+
+	return (void*)input;
+}
+
 void DetLoggerClient::runTestAndCompare(DetLoggerClient *client) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
@@ -282,7 +305,7 @@ void DetLoggerClient::runDetLoggerTest(DetLoggerClient *client, PALSManager* pm)
 
 }
 
-void DetLoggerClient::getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId) {
+void DetLoggerClient::getProcessedPacketIds(DetLoggerClient *client, void* msgToSend) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 	vector<uint64_t> retValAsObj;
@@ -290,7 +313,8 @@ void DetLoggerClient::getProcessedPacketIds(DetLoggerClient *client, uint16_t* m
 //	*test = 1;
 //	retValAsObj.push_back(test);
 
-	client->prepareToSend((void*)mbId, serialized, &len, GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE);
+
+	client->prepareToSend(msgToSend, serialized, &len, GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE);
 
 	bool isSucceed = client->sendMsgAndWait(serialized, len, GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE, static_cast<void*>(&retValAsObj));
 

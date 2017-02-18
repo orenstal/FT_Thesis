@@ -30,6 +30,7 @@ class DetLoggerClient : public Client {
 private:
 	void serializePalsManagerObject(int command, void* obj, char* serialized, int* len);
 	void serializeGetPalsByMBIdAndPackId(int command, void* obj, char* serialized, int* len);
+	void serializeGetProcessedPackIdsByMBId(int command, void* obj, char* serialized, int* len);
 	void serializeDeleteFirstPackets(int command, void* obj, char* serialized, int* len);
 	void handleGetPacketIdsResponse(int command, char* retVal, int len, void* retValAsObj);
 	void handleGetPalsByMBIdAndPackIdResponse(int command, char* retVal, int retValLen, void* retValAsObj);
@@ -40,9 +41,10 @@ private:
 	static PALSManager* prepareDetLoggerTest3();
 	static PALSManager* prepareDetLoggerTest4();
 	static void* prepareGetPalsTest(uint16_t mbId, uint64_t packId);
+	static void* prepareGetProcessedPacketsTest(uint16_t mbId, bool allVersions);
 	static void runTestAndCompare(DetLoggerClient *client);
 	static void runDetLoggerTest(DetLoggerClient *client, PALSManager* pm);
-	static void getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId);
+	static void getProcessedPacketIds(DetLoggerClient *client, void* msgToSend);
 	static void getPals(DetLoggerClient *client, void* msgToSend);
 	// end mocked client
 

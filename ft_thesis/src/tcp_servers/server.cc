@@ -24,11 +24,11 @@ Server::Server(int port) {
 	Server::port = port;
 
 	cout << "is debug Mode?" << endl;
-#ifdef DEBUG
-	cout << "Yes" << endl;
-#else
-	cout << "No" << endl;
-#endif
+	if (DEBUG) {
+		cout << "Yes" << endl;
+	} else {
+		cout << "No" << endl;
+	}
 }
 
 
@@ -199,9 +199,8 @@ void Server::handleClientRequestThread(int sockfd) {
 
 
 	// for debug usage
-#ifdef DEBUG
-	printMsg(msg, msgLen);
-#endif
+	if (DEBUG)
+		printMsg(msg, msgLen);
 
 	retVal = new char[MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 
@@ -225,7 +224,7 @@ void Server::handleClientRequestThread(int sockfd) {
  * This function returns a string representation of length numOfDigits for the inserted number. If the number's
  * length is smaller than numOfDigits, we pad the returned string with 0 at the beginning appropriately.
  */
-void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
+void Server::intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 {
 	sprintf(numAsStr, "%0*d", numOfDigits, number);
 }
@@ -233,18 +232,18 @@ void intToStringDigits (int number, uint8_t numOfDigits, char* numAsStr)
 bool Server::sendMsg(int sockfd, char* retVal, int length) {
 	DEBUG_STDOUT(cout << "in sendMsg.. length: " << length << ", msg:");
 
-#ifdef DEBUG
-	// print message content
-	for(int i=0; i< length; i++) {
-		printf("%c", retVal[i]);
+	if (DEBUG) {
+		// print message content
+		for(int i=0; i< length; i++) {
+			printf("%c", retVal[i]);
+		}
+		cout << endl;
 	}
-	cout << endl;
-#endif
 
 	int totalSentBytes = 0;
 
 	if (length > MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS) {
-		cout << "ERROR: can't send message that is too long" << endl;
+		cout << "ERROR: can't send message (" << length << ") that is too long (" << (MAX_RET_VAL_LENGTH+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS) << ")" << endl;
 		return false;
 	}
 
@@ -261,6 +260,7 @@ bool Server::sendMsg(int sockfd, char* retVal, int length) {
 
 		if (ret < 0) {
 			cout << "ERROR: Failed to send. Trying one more time.." << endl;
+			cout << "Reason: " << errno << endl;
 
 			// trying to send one more time after failing the first time
 			ret = send(sockfd, retVal, length - totalSentBytes, 0);
@@ -296,12 +296,15 @@ void Server::writeResponseToClient(int sockfd, bool succeed, char* retVal, int r
 
 	DEBUG_STDOUT(cout << "numAsStr is: " << numAsStr << ", retValLen is: " << retValLen << endl);
 
-#ifdef DEBUG
 	for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
-		printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
 		retVal[i] = numAsStr[i];
 	}
-#endif
+
+	if (DEBUG) {
+		for (int i=0; i<NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX; i++) {
+			printf("numAsStr[%d]: %c\n", i, numAsStr[i]);
+		}
+	}
 
 	if (succeed) {
 		retVal[NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX] = '1';

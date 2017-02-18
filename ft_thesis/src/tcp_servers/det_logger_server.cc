@@ -11,6 +11,7 @@
 #include "server.hh"
 #include <map>
 #include <vector>
+#include <set>
 
 #define PORT 9095	// port to listening on
 #define GPAL_VAL_SIZE 50
@@ -73,6 +74,8 @@ private:
 	void* deserializeClientStoreRequest(int command, char* msg, int msgLen);
 	bool processStoreRequest(void* obj, char* retVal, int* retValLen);
 	bool processGetProcessedPacketsRequest(void* obj, char* retVal, int* retValLen);
+	void getProcessedPacketsForFirstVersion(ServerProgressData* spd, uint64_t* returnValue, int* retValLen);
+	void getProcessedPacketsForAllVersions(ServerProgressData* spd, uint64_t* returnValue, int* retValLen);
 	bool processGetPalsRequest(void* obj, char* retVal, int* retValLen);
 	bool processDeleteFirstPacketsRequest(void* obj, char* retVal, int* retValLen);
 
@@ -117,16 +120,26 @@ void* DetLoggerServer::deserializeClientStoreRequest(int command, char* msg, int
 bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
 	DEBUG_STDOUT(cout << "DetLoggerServer::processStoreRequest" << endl);
 	PALSManager* pm = (PALSManager*)obj;
-	pm->printContent();
+
+	if (DEBUG) {
+		pm->printContent();
+	}
+
 	PacketData* packetData = getOrCreatePacketData(pm);
 	updatePacketData(packetData, pm);
 
 	ServerProgressData* packetIds = getOrCreateServerProgressData(pm->getMBId());
 	addPacketId(pm->getPacketId(), packetIds);
 
-#ifdef DEBUG
-	printState();
-#endif
+	if (DEBUG) {
+		printState();
+	} else {
+		cout << "Partial Progress Data State:" << endl;
+		for (SPDIterType iter = progressData.begin(); iter != progressData.end(); iter++) {
+			ServerProgressData* spd = iter->second;
+			cout << "mbId: " << iter->first << ", number of packet ids: " << spd->index << endl;
+		}
+	}
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;
@@ -138,8 +151,19 @@ bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal,
 	DEBUG_STDOUT(cout << "DetLoggerServer::processGetProcessedPacketsRequest" << endl);
 
 	// extract the mbId from the client request
-	uint16_t mbId = *((uint16_t*)obj);
-	DEBUG_STDOUT(cout << "mbId is: " << mbId << endl);
+	uint16_t mbId = 0;
+	bool allVersions = true;
+
+	// extract mbId and packId from client request
+	uint16_t *q = (uint16_t*)obj;
+	mbId = *q;
+	q++;
+
+	bool *p = (bool*)q;
+	allVersions = *p;
+
+	DEBUG_STDOUT(cout << "mbId is: " << mbId << ", allVersions: " << allVersions << endl);
+
 	ServerProgressData* spd = getServerProgressData(mbId);
 
 	if (spd == NULL) {
@@ -150,20 +174,58 @@ bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal,
 
 	uint64_t* returnValue = (uint64_t*)retVal;
 
+	if (allVersions) {
+		getProcessedPacketsForAllVersions(spd, returnValue, retValLen);
+	} else {
+		getProcessedPacketsForFirstVersion(spd, returnValue, retValLen);
+	}
+
+	DEBUG_STDOUT(cout << "retValLen: " << *retValLen << ", spd->index: " << spd->index << ", sizeof(uint64_t*): " << sizeof(uint64_t*) << endl);
+
+	return true;
+}
+
+void DetLoggerServer::getProcessedPacketsForFirstVersion(ServerProgressData* spd, uint64_t* returnValue, int* retValLen) {
+
+	// todo add mutex
+	vector<uint64_t> packetIds = spd->packet_ids_vector;
+	// todo free mutex
+
+	uint32_t returnedValIndex=0;
+	set<uint64_t> processedBases;
+
+	for (uint32_t i=0; i< spd->index; i++) {
+		uint64_t packetIdBase = packetIds[i] >> 5;
+
+		if (processedBases.find(packetIdBase) == processedBases.end()) {
+			returnValue[returnedValIndex] = packetIds[i];
+			DEBUG_STDOUT(cout << "returnValue[" << returnedValIndex << "]: " << returnValue[returnedValIndex] << endl);
+			processedBases.insert(packetIdBase);
+			returnedValIndex++;
+		} else {
+			DEBUG_STDOUT(cout << "packetIdBase: " << packetIdBase << " was already appeared. current version is: " << (packetIds[i] & 31) << endl);
+		}
+	}
+
+	*retValLen = returnedValIndex * sizeof(uint64_t*);
+}
+
+
+void DetLoggerServer::getProcessedPacketsForAllVersions(ServerProgressData* spd, uint64_t* returnValue, int* retValLen) {
+
 	// todo add mutex
 	vector<uint64_t> packetIds = spd->packet_ids_vector;
 	// todo free mutex
 
 	for (uint32_t i=0; i< spd->index; i++) {
 		returnValue[i] = packetIds[i];
-		DEBUG_STDOUT(cout << "returnValue[" << i << "]: " << returnValue[i] << endl);
+		DEBUG_STDOUT(cout << "returnValue[" << returnedValIndex << "]: " << returnValue[returnedValIndex] << endl);
 	}
 
 	*retValLen = spd->index * sizeof(uint64_t*);
-	DEBUG_STDOUT(cout << "retValLen: " << *retValLen << ", spd->index: " << spd->index << ", sizeof(uint64_t*): " << sizeof(uint64_t*) << endl);
-
-	return true;
 }
+
+
 
 bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retValLen) {
 	DEBUG_STDOUT(cout << "DetLoggerServer::processGetPalsRequest" << endl);
@@ -222,11 +284,10 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 		deleteFirstPackets(mbId, totalPacketsToRemove, spd);
 	}
 
-#ifdef DEBUG
-	DEBUG_STDOUT();
-	cout << "state after deletion:" << endl;
-	printState();
-#endif
+	if (DEBUG) {
+		DEBUG_STDOUT(cout << "state after deletion:" << endl;);
+		printState();
+	}
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;

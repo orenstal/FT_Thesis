@@ -19,6 +19,7 @@
 #include <ctype.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <chrono>
 
 
 #define MAX_ADDRESS_LEN 16
@@ -143,13 +144,13 @@ void* PacketLoggerServer::deserializeClientReplayRequest(int command, char* msg,
 		replayData->packetIds->push_back(v[i]);
 	}
 
-#ifdef DEBUG
-	cout << "replayData: mbId: " << replayData->mbId << ", port: " << replayData->port << ", address: " << replayData->address << ", vector: " << endl;
+	if (DEBUG) {
+		cout << "replayData: mbId: " << replayData->mbId << ", port: " << replayData->port << ", address: " << replayData->address << ", vector: " << endl;
 
-	for (int i=0; i< replayData->packetIds->size(); i++) {
-		cout << "[" << i << "] = " << (*replayData->packetIds)[i] << endl;
+		for (int i=0; i< replayData->packetIds->size(); i++) {
+			cout << "[" << i << "] = " << (*replayData->packetIds)[i] << endl;
+		}
 	}
-#endif
 
 	return (void*)replayData;
 }
@@ -171,13 +172,13 @@ void* PacketLoggerServer::deserializeClientDeletePacketsRequest(int command, cha
 		deletePacketsData->packetIds->push_back(v[i]);
 	}
 
-#ifdef DEBUG
-	cout << "deletePacketsData: vector: "<< endl;
+	if (DEBUG) {
+		cout << "deletePacketsData: vector: "<< endl;
 
-	for (int i=0; i< deletePacketsData->packetIds->size(); i++) {
-		cout << "[" << i << "] = " << (*deletePacketsData->packetIds)[i] << endl;
+		for (int i=0; i< deletePacketsData->packetIds->size(); i++) {
+			cout << "[" << i << "] = " << (*deletePacketsData->packetIds)[i] << endl;
+		}
 	}
-#endif
 
 	return (void*)deletePacketsData;
 }
@@ -205,9 +206,11 @@ bool PacketLoggerServer::processStoreRequest(void* obj, char* retVal, int* retVa
 
 	PacketVersionsData* packetVersions = getOrCreateServerProgressData(wpd->packetId);
 	addPacketVersion(packetVersions, wpd);
-#ifdef DEBUG
-	printState();
-#endif
+	if (DEBUG) {
+		printState();
+	} else {
+		cout << "total number of packets bases: " << packetsVersions.size() << endl;
+	}
 
 	// ack/nack will be sent anyway.
 	*retValLen = 0;
@@ -244,34 +247,52 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 
 	DEBUG_STDOUT(cout << "address : " << address << endl);
 
-	unsigned char packet[SERVER_BUFFER_SIZE];
+	unsigned char packet[SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX];
 	int packetLen;
 
+	int destMbSockfd = connectTodestMb(address, replayData->port);
+	DEBUG_STDOUT(cout << "destMbSockfd: " << destMbSockfd << endl);
+
+	if (destMbSockfd == -1) {
+		cout << "ERROR: failed to connect dest mb" << endl;
+		return false;
+	}
+
+	// activate keep-alive mechanism
+	int val = 1;
+	setsockopt(destMbSockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
+
 	for (int i=0; i<packetsToReplay->size(); i++) {
+		time(NULL);
 
-		int destMbSockfd = connectTodestMb(address, replayData->port);
-		DEBUG_STDOUT(cout << "destMbSockfd: " << destMbSockfd << endl);
+//		int destMbSockfd = connectTodestMb(address, replayData->port);
+//		DEBUG_STDOUT(cout << "destMbSockfd: " << destMbSockfd << endl);
+//
+//		if (destMbSockfd == -1) {
+//			cout << "ERROR: failed to connect dest mb" << endl;
+//			return false;
+//		}
 
-		if (destMbSockfd == -1) {
-			cout << "ERROR: failed to connect dest mb" << endl;
-			return false;
-		}
-
-		memset(packet, '\0', SERVER_BUFFER_SIZE);
+		memset(packet, '\0', SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 		packetLen = 0;
 
 		uint64_t packId = (*packetsToReplay)[i];
+		cout << "sending packet id: " << packId << endl;
 		DEBUG_STDOUT(cout << "sending packet id: " << packId << endl);
 
-		if (getPacket(packId, packet, &packetLen)) {
+		if (getPacket(packId, packet+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, &packetLen)) {
 			if (packetLen > 0) {
+				cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl;
 				DEBUG_STDOUT(cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl);
-				sendMsgToDstMb(destMbSockfd, (char*)packet, packetLen);
+
+				intToStringDigits(packetLen, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, (char*)packet);
+				sendMsgToDstMb(destMbSockfd, (char*)packet, packetLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 			}
 		}
 
-		close(destMbSockfd);
+//		close(destMbSockfd);
 	}
+	close(destMbSockfd);
 
 	DEBUG_STDOUT(cout << "[ProgressLoggerServer::processReplayRequest] done" << endl);
 
@@ -284,10 +305,10 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 bool PacketLoggerServer::processDeletePacketsRequest(void* obj, char* retVal, int* retValLen) {
 	DEBUG_STDOUT(cout << "ProgressLoggerServer::processDeletePacketsRequest" << endl);
 
-#ifdef DEBUG
-	DEBUG_STDOUT(cout << "state before:" << endl);
-	printState();
-#endif
+	if (DEBUG) {
+		DEBUG_STDOUT(cout << "state before:" << endl);
+		printState();
+	}
 
 	DeletePackets* deletePacketsData = (DeletePackets*)obj;
 	vector<uint64_t>* packetsToDelete = deletePacketsData->packetIds;
@@ -300,10 +321,10 @@ bool PacketLoggerServer::processDeletePacketsRequest(void* obj, char* retVal, in
 		deletePacket(packId);
 	}
 
-#ifdef DEBUG
-	DEBUG_STDOUT(cout << "state after:" << endl);
-	printState();
-#endif
+	if (DEBUG) {
+		DEBUG_STDOUT(cout << "state after:" << endl);
+		printState();
+	}
 
 	DEBUG_STDOUT(cout << "[ProgressLoggerServer::processDeletePacketsRequest] done" << endl);
 
@@ -451,6 +472,14 @@ PacketVersionsData* PacketLoggerServer::getOrCreateServerProgressData(uint64_t p
 
 	DEBUG_STDOUT(cout << "packetsVersions.count(" << packetIdBase << "): " << packetsVersions.count(packetIdBase) << endl);
 
+//	cout << "PacketLoggerServer::getOrCreateServerProgressData" << endl;
+//	if (packetId == 805311238) {
+		cout << "packet id: " << packetId << endl;
+		cout << "packetsVersions.count(" << packetIdBase << "): " << packetsVersions.count(packetIdBase) << endl;
+//		cout << "total number of packets bases: " << packetsVersions.size() << endl;
+//	}
+
+
 	if (!packetsVersions.count(packetIdBase)) {
 		pvd = new PacketVersionsData();
 		packetsVersions[packetIdBase] = pvd;
@@ -546,21 +575,21 @@ int PacketLoggerServer::connectTodestMb(char* mbAddress, int mbPort) {
 
 bool PacketLoggerServer::sendMsgToDstMb(int destMbSockfd, char* msgToSend, int length) {
 
-#ifdef DEBUG
-	cout << "in sendMsg.. length: " << length << ", msg:";
+	if (DEBUG) {
+		cout << "in sendMsg.. length: " << length << ", msg:";
 
-	// print message content
-	for(int i=0; i< length; i++) {
-		printf("%c", msgToSend[i]);
+		// print message content
+		for(int i=0; i< length; i++) {
+			printf("%c", msgToSend[i]);
+		}
+
+		printf("\n");
 	}
-
-	printf("\n");
-#endif
 
 	int totalSentBytes = 0;
 
 	if (length > SERVER_BUFFER_SIZE) {
-		cout << "ERROR: can't send message that is longer than " << SERVER_BUFFER_SIZE << endl;
+		cout << "ERROR: can't send message that is longer than " << SERVER_BUFFER_SIZE << " (" << length << ")" << endl;
 		return false;
 	}
 
