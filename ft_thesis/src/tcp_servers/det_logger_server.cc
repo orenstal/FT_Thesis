@@ -79,7 +79,7 @@ private:
 	bool processGetPalsRequest(void* obj, char* retVal, int* retValLen);
 	bool processDeleteFirstPacketsRequest(void* obj, char* retVal, int* retValLen);
 
-	void deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToRemove, ServerProgressData* spd);
+	void deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBasesToRemove, ServerProgressData* spd);
 	void deletePacketFromMbData(mbDataMap *mbData, uint64_t packetToRemove);
 	void freePacketData(PacketData* packetData);
 
@@ -118,6 +118,7 @@ void* DetLoggerServer::deserializeClientStoreRequest(int command, char* msg, int
 }
 
 bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
+	cout << "DetLoggerServer::processStoreRequest" << endl;
 	DEBUG_STDOUT(cout << "DetLoggerServer::processStoreRequest" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 
@@ -219,7 +220,7 @@ void DetLoggerServer::getProcessedPacketsForAllVersions(ServerProgressData* spd,
 
 	for (uint32_t i=0; i< spd->index; i++) {
 		returnValue[i] = packetIds[i];
-		DEBUG_STDOUT(cout << "returnValue[" << returnedValIndex << "]: " << returnValue[returnedValIndex] << endl);
+		DEBUG_STDOUT(cout << "returnValue[" << i << "]: " << returnValue[i] << endl);
 	}
 
 	*retValLen = spd->index * sizeof(uint64_t*);
@@ -265,7 +266,7 @@ bool DetLoggerServer::processGetPalsRequest(void* obj, char* retVal, int* retVal
 bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, int* retValLen) {
 	DEBUG_STDOUT(cout << "[DetLoggerServer::processDeletePacketsRequest]" << endl);
 	uint16_t mbId;
-	uint32_t totalPacketsToRemove = 0;	// the number of first packets to be removed
+	uint32_t totalPacketBasesToRemove = 0;	// the number of first packets to be removed
 
 	// extract mbId from client request
 	uint16_t *q = (uint16_t*)obj;
@@ -273,7 +274,7 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 	q++;
 
 	uint32_t *tp = (uint32_t*)q;
-	totalPacketsToRemove = *tp;
+	totalPacketBasesToRemove = *tp;
 	tp++;
 
 	DEBUG_STDOUT(cout << "mbId: " << mbId << ", total packets to delete: " << totalPacketsToRemove << endl);
@@ -281,7 +282,7 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 	ServerProgressData* spd = getServerProgressData(mbId);
 
 	if (spd != NULL) {
-		deleteFirstPackets(mbId, totalPacketsToRemove, spd);
+		deleteFirstPackets(mbId, totalPacketBasesToRemove, spd);
 	}
 
 	if (DEBUG) {
@@ -297,17 +298,18 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 
 
 
-void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToRemove, ServerProgressData* spd) {
+void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBasesToRemove, ServerProgressData* spd) {
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] Start" << endl);
 	DEBUG_STDOUT(cout << "spd->index before: " << spd->index << endl);
 
+	int totalPackets = spd->index;
 	mbDataMap *mbData = NULL;
 	if (detData.find(mbId) != detData.end()) {
 		DEBUG_STDOUT(cout << "mbId " << mbId << " exist in detData" << endl);
 		mbData = &(detData[mbId]);
 	}
 
-	for (int i=0; i<totalPacketsToRemove; i++) {
+	for (int i=0; i<totalPacketBasesToRemove; i++) {
 		uint64_t packetToRemove = spd->packet_ids_vector[i];
 		deletePacketFromMbData(mbData, packetToRemove);
 	}
@@ -315,9 +317,10 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketsToR
 	// todo I can reduce the memory consumption by using: http://stackoverflow.com/questions/7351899/remove-first-n-elements-from-a-stdvector
 
 	// erase the first totalPacketsToRemove packet ids
-	spd->packet_ids_vector.erase(spd->packet_ids_vector.begin(), spd->packet_ids_vector.begin() + totalPacketsToRemove);
-	spd->index -= totalPacketsToRemove;
+	spd->packet_ids_vector.erase(spd->packet_ids_vector.begin(), spd->packet_ids_vector.begin() + totalPacketBasesToRemove);
+	spd->index -= totalPacketBasesToRemove;
 
+	cout << "Deleting " << totalPacketBasesToRemove << " packets" << endl;
 	DEBUG_STDOUT(cout << "spd->index after: " << spd->index << endl);
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] End" << endl);
 }
@@ -361,7 +364,7 @@ void DetLoggerServer::deletePacketFromMbData(mbDataMap *mbData, uint64_t packetT
 		DEBUG_STDOUT(cout << "packetToRemove: " << packetToRemove << endl);
 
 		if (mbData->find(packetToRemove) != mbData->end()) {
-			DEBUG_STDOUT(cout << "packetToRemove: " << packetToRemove << endl);
+			DEBUG_STDOUT(cout << "~packetToRemove: " << packetToRemove << endl);
 			PacketData *packetData = mbData->at(packetToRemove);
 
 			freePacketData(packetData);

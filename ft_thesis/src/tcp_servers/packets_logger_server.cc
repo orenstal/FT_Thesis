@@ -263,35 +263,24 @@ bool PacketLoggerServer::processReplayRequest(void* obj, char* retVal, int* retV
 	setsockopt(destMbSockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
 
 	for (int i=0; i<packetsToReplay->size(); i++) {
-		time(NULL);
-
-//		int destMbSockfd = connectTodestMb(address, replayData->port);
-//		DEBUG_STDOUT(cout << "destMbSockfd: " << destMbSockfd << endl);
-//
-//		if (destMbSockfd == -1) {
-//			cout << "ERROR: failed to connect dest mb" << endl;
-//			return false;
-//		}
+//		time(NULL);
 
 		memset(packet, '\0', SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 		packetLen = 0;
 
 		uint64_t packId = (*packetsToReplay)[i];
-		cout << "sending packet id: " << packId << endl;
 		DEBUG_STDOUT(cout << "sending packet id: " << packId << endl);
 
 		if (getPacket(packId, packet+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, &packetLen)) {
 			if (packetLen > 0) {
-				cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl;
 				DEBUG_STDOUT(cout << "sending to " << address << ", port: " << replayData->port << " packet of len: " << packetLen << ", content: " << packet << endl);
 
 				intToStringDigits(packetLen, NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX, (char*)packet);
 				sendMsgToDstMb(destMbSockfd, (char*)packet, packetLen+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX);
 			}
 		}
-
-//		close(destMbSockfd);
 	}
+
 	close(destMbSockfd);
 
 	DEBUG_STDOUT(cout << "[ProgressLoggerServer::processReplayRequest] done" << endl);

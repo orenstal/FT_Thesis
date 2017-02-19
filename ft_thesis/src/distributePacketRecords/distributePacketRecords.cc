@@ -266,7 +266,7 @@ DistributePacketRecords::smactionSlave(Packet *p)
 	PALSManager* mbPm =(PALSManager *)PALS_MANAGER_REFERENCE_ANNO(p);
 	delete mbPm;
 
-	return NULL; // prevent the packet from be sent again (only master should send packets)
+	return p;
 }
 
 Packet *
