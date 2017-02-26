@@ -16,6 +16,7 @@
 #include <sys/epoll.h>
 #include <errno.h>
 #include <map>
+#include <set>
 #include <pthread.h>
 #include <iostream>
 
@@ -28,7 +29,7 @@ class EpollServer;
 typedef struct ThreadInfo {
 	char srcHostName[NI_MAXHOST];
 	int id;
-	int efdSize;
+	set<int> *sockfds;
 	int efd;
 	struct epoll_event event;
 	struct epoll_event *events;
@@ -53,18 +54,28 @@ private:
 	map<char*, ThreadInfo*> threadsInfo;
 	map<int, pthread_t*> activeThreads;
 
+	pthread_spinlock_t threadsToDeleteLock;
+	set<pthread_t*> threadsToDelete;
+
 
 	int make_socket_non_blocking(int sfd);
 	void create_and_bind();
 	void initThreadInfo (ThreadInfo* info, char* hostName);
 	void addNewClient();
 	void removeClient(int sockfdToRemove, int numOfReceivedBytes);
-	void doRemoveClient(int sockfdToRemove);
+	void doRemoveClient(int sockfdToRemove, ThreadInfo* info);
 	void handleClientRequest(int sockfd);
 	ThreadInfo* getOrCreateThreadInfo (char* hostName, bool* shouldCreateNewThread);
-	void addSockfdToThreadEvents(ThreadInfo* info, int infd);
+	ThreadInfo* getThreadInfoBySockfd(int sockfd);
+	void addSockfdToThreadInfo(ThreadInfo* info, int infd);
 	void removeOrphanThreads();
 	void runThread(ThreadInfo* info);
+	void addThreadToDeleteSet(pthread_t* th);
+	void initSpinLock(pthread_spinlock_t* lock);
+	void lockSpinLock(pthread_spinlock_t* lock);
+	void unlockSpinLock(pthread_spinlock_t* lock);
+	void deleteThreadsFromSet();
+
 
 	static void* threadRunnerHelper(void* voidArgs) {
 		ThreadArgs* args = (ThreadArgs*)voidArgs;
@@ -174,6 +185,8 @@ void EpollServer::init() {
 
 	/* Buffer where events are returned */
 	events = (epoll_event *)calloc (MAXEVENTS, sizeof(struct epoll_event));
+
+	initSpinLock(&threadsToDeleteLock);
 }
 
 void EpollServer::initThreadInfo (ThreadInfo* info, char* hostName) {
@@ -186,8 +199,8 @@ void EpollServer::initThreadInfo (ThreadInfo* info, char* hostName) {
 	// set thread id
 	info->id = ++_threadIdSequencer;
 
-	// init efd size
-	info->efdSize = 0;
+	// init sock fds set
+	info->sockfds = new set<int>;
 
 	// create new efd
 	info->efd = epoll_create1(0);
@@ -201,13 +214,7 @@ void EpollServer::initThreadInfo (ThreadInfo* info, char* hostName) {
 	info->events = (epoll_event *)calloc (MAXEVENTS, sizeof(struct epoll_event));
 
 	// init spin lock
-	int ret = pthread_spin_init(&(info->lock), PTHREAD_PROCESS_SHARED);
-	printf("spin lock was initialized\n");
-
-	if (ret != 0) {
-		perror ("pthread_spin_init error");
-		abort ();
-	}
+	initSpinLock(&(info->lock));
 
 	// add to new thread to threadsInfo map
 	printf("1\n");
@@ -255,7 +262,7 @@ void EpollServer::addNewClient() {
 
 		bool shouldCreateNewThread = false;
 		ThreadInfo* threadInfo = getOrCreateThreadInfo(hbuf, &shouldCreateNewThread);
-		addSockfdToThreadEvents(threadInfo, infd);
+		addSockfdToThreadInfo(threadInfo, infd);
 
 		if (shouldCreateNewThread) {
 			ThreadArgs threadArgs;
@@ -286,9 +293,9 @@ ThreadInfo* EpollServer::getOrCreateThreadInfo (char* hostName, bool* shouldCrea
 	printf("[EpollServer::getOrCreateThreadInfo] End\n");
 }
 
-void EpollServer::addSockfdToThreadEvents(ThreadInfo* info, int infd) {
+void EpollServer::addSockfdToThreadInfo(ThreadInfo* info, int infd) {
 
-	printf("[EpollServer::addSockfdToThreadEvents] infd: %d\n", infd);
+	printf("[EpollServer::addSockfdToThreadInfo] infd: %d\n", infd);
 
 	/* Make the incoming socket non-blocking and add it to the
 	   list of fds to monitor. */
@@ -298,16 +305,7 @@ void EpollServer::addSockfdToThreadEvents(ThreadInfo* info, int infd) {
 
 	printf("1\n");
 
-	int ret = pthread_spin_lock(&(info->lock));
-
-	printf("2\n");
-
-	if (ret != 0) {
-		perror ("pthread_spin_lock error");
-		abort ();
-	}
-
-	printf("3\n");
+	lockSpinLock(&(info->lock));
 
 	info->event.data.fd = infd;
 	info->event.events = EPOLLIN;		//EPOLLIN | EPOLLET;
@@ -322,20 +320,13 @@ void EpollServer::addSockfdToThreadEvents(ThreadInfo* info, int infd) {
 
 	printf("5\n");
 
-	ret = pthread_spin_unlock(&(info->lock));
+	unlockSpinLock(&(info->lock));
 
-	printf("6\n");
+	info->sockfds->insert(infd);
 
-	if (ret != 0) {
-		perror ("pthread_spin_lock error");
-		abort ();
-	}
+	printf("num of sockets to listen to: %d\n", (int)info->sockfds->size());
 
-	info->efdSize++;
-
-	printf("info->efdSize: %d\n", info->efdSize);
-
-	printf("[EpollServer::addSockfdToThreadEvents] End\n");
+	printf("[EpollServer::addSockfdToThreadInfo] End\n");
 }
 
 void EpollServer::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
@@ -351,13 +342,27 @@ void EpollServer::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
 		cout << "ERROR: recv() error lol!" << endl;
 	}
 
-	doRemoveClient(sockfdToRemove);
+	doRemoveClient(sockfdToRemove, NULL);
 
 	cout << "Done removing client " << sockfdToRemove << endl;
 }
 
-void EpollServer::doRemoveClient(int sockfdToRemove) {
+void EpollServer::doRemoveClient(int sockfdToRemove, ThreadInfo* info) {
 	cout << "[EpollServer::doRemoveClient] Start" << endl;
+
+	if (info == NULL) {
+		info = getThreadInfoBySockfd(sockfdToRemove);
+
+		if (info == NULL) {
+			return;
+		}
+	}
+
+	lockSpinLock(&(info->lock));
+	if (info->sockfds->find(sockfdToRemove) != info->sockfds->end()) {
+		info->sockfds->erase(sockfdToRemove);
+	}
+	unlockSpinLock(&(info->lock));
 
 	/* Closing the descriptor will make epoll remove it
 	   from the set of descriptors which are monitored. */
@@ -365,6 +370,20 @@ void EpollServer::doRemoveClient(int sockfdToRemove) {
 	removeOrphanThreads();
 	cout << "[EpollServer::doRemoveClient] Done";
 }
+
+ThreadInfo* EpollServer::getThreadInfoBySockfd(int sockfd) {
+	cout << "[EpollServer::getThreadInfoBySockfd] Start" << endl;
+	ThreadInfo* info = NULL;
+
+	for (map<char*, ThreadInfo*>::iterator iter = threadsInfo.begin(); iter != threadsInfo.end(); ) {
+		info = iter->second;
+		break;
+	}
+
+	cout << "[EpollServer::getThreadInfoBySockfd] End" << endl;
+	return info;
+}
+
 
 void EpollServer::handleClientRequest(int sockfd) {
 	// todo this function should be replaced with this of server.cc
@@ -416,13 +435,16 @@ void EpollServer::run() {
 		cout << "Server-epoll_wait() is OK..." << endl;
 //		DEBUG_STDOUT(cout << "Server-epoll_wait() is OK..." << endl);
 
+		cout << "About to delete orphan threads" << endl;
+		deleteThreadsFromSet();
+
 		for (i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||
 					(!(events[i].events & EPOLLIN))) {
 				/*  An error has occured on this fd, or the socket is not
 					ready for reading (why were we notified then?) */
 				cout << "ERROR: epoll error. continue to next socket.." << endl;
-				doRemoveClient(events[i].data.fd);
+				doRemoveClient(events[i].data.fd, NULL);
 //				close(events[i].data.fd);
 				continue;
 
@@ -447,28 +469,6 @@ void EpollServer::run() {
 	close(sfd);
 }
 
-void EpollServer::removeOrphanThreads() {
-	cout << "[EpollServer::removeOrphanThreads] Start" << endl;
-
-	for (map<char*, ThreadInfo*>::iterator iter = threadsInfo.begin(); iter != threadsInfo.end(); ) {
-		ThreadInfo* info = iter->second;
-		if (info->efdSize == 0) {
-			cout << "erasing thread id: " << info->id << ", hostname: " << info->srcHostName << endl;
-			delete info->events;
-			delete info;
-			delete activeThreads[info->id];
-			activeThreads.erase(info->id);
-			threadsInfo.erase(iter++);
-		} else {
-			cout << "thread id: " << info->id << ", hostname: " << info->srcHostName << ", efdSize: " << info->efdSize << endl;
-			iter++;
-		}
-	}
-
-	cout << "[EpollServer::removeOrphanThreads] End" << endl;
-}
-
-
 void EpollServer::runThread(ThreadInfo* info) {
 	int s;
 
@@ -487,7 +487,7 @@ void EpollServer::runThread(ThreadInfo* info) {
 				/*  An error has occured on this fd, or the socket is not
 					ready for reading (why were we notified then?) */
 				cout << "ERROR: epoll error. continue to next socket.." << endl;
-				doRemoveClient(events[i].data.fd);
+				doRemoveClient(events[i].data.fd, info);
 //				close(info->events[i].data.fd);
 				continue;
 
@@ -503,6 +503,99 @@ void EpollServer::runThread(ThreadInfo* info) {
 		}
 	}
 }
+
+
+void EpollServer::removeOrphanThreads() {
+	cout << "[EpollServer::removeOrphanThreads] Start" << endl;
+
+	for (map<char*, ThreadInfo*>::iterator iter = threadsInfo.begin(); iter != threadsInfo.end(); ) {
+		ThreadInfo* info = iter->second;
+		lockSpinLock(&(info->lock));
+
+		if (info->sockfds->size() == 0) {
+			cout << "erasing thread id: " << info->id << ", hostname: " << info->srcHostName << endl;
+			delete info->events;
+			delete info;
+
+			addThreadToDeleteSet(activeThreads[info->id]);
+			activeThreads.erase(info->id);
+			threadsInfo.erase(iter++);
+		} else {
+			cout << "thread id: " << info->id << ", hostname: " << info->srcHostName << ", sockfdsSize: " << info->sockfds->size() << endl;
+			iter++;
+		}
+
+		unlockSpinLock(&(info->lock));
+	}
+
+	cout << "[EpollServer::removeOrphanThreads] End" << endl;
+}
+
+void EpollServer::addThreadToDeleteSet(pthread_t* th) {
+	cout << "[EpollServer::addThreadToDeleteSet] Start" << endl;
+
+	lockSpinLock(&threadsToDeleteLock);
+	threadsToDelete.insert(th);
+	unlockSpinLock(&threadsToDeleteLock);
+
+	cout << "[EpollServer::addThreadToDeleteSet] End" << endl;
+}
+
+void EpollServer::initSpinLock(pthread_spinlock_t* lock) {
+	cout << "[EpollServer::initSpinLock] Start" << endl;
+
+	int ret = pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
+
+	if (ret != 0) {
+		perror ("pthread_spin_init error");
+		abort ();
+	}
+
+	cout << "spin lock was initialized" << endl;
+}
+
+
+void EpollServer::lockSpinLock(pthread_spinlock_t* lock) {
+	cout << "trying to pass spin lock" << endl;
+	int ret = pthread_spin_lock(lock);
+
+	if (ret != 0) {
+		perror ("pthread_spin_lock error");
+		abort ();
+	}
+
+	cout << "spin lock is locked" << endl;
+}
+
+void EpollServer::unlockSpinLock(pthread_spinlock_t* lock) {
+	int ret = pthread_spin_unlock(lock);
+
+	if (ret != 0) {
+		perror ("pthread_spin_lock error");
+		abort ();
+	}
+
+	cout << "spin lock is free" << endl;
+}
+
+
+void EpollServer::deleteThreadsFromSet() {
+	cout << "[EpollServer::deleteThreadsFromSet] Start" << endl;
+	lockSpinLock(&threadsToDeleteLock);
+
+	for (set<pthread_t*>::iterator iter = threadsToDelete.begin(); iter != threadsToDelete.end(); iter++) {
+		pthread_t* th = *iter;
+		cout << "~" << endl;
+		delete th;
+	}
+
+	threadsToDelete.clear();
+
+	unlockSpinLock(&threadsToDeleteLock);
+	cout << "[EpollServer::deleteThreadsFromSet] End" << endl;
+}
+
+
 
 
 int main (int argc, char *argv[]) {
