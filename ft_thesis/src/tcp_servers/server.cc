@@ -440,3 +440,78 @@ bool Server::processRequest(void* obj, int command, char* retVal, int* retValLen
 void Server::freeDeserializedObject(void* obj, int command) {
 	DEBUG_STDOUT(cout << "Server::freeObject" << endl);
 }
+
+void Server::initSpinLock(pthread_spinlock_t* lock) {
+//	cout << "[Server::initSpinLock] Start" << endl;
+
+	int ret = pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
+
+	if (ret != 0) {
+		perror ("pthread_spin_init error");
+		abort ();
+	}
+
+//	cout << "spin lock was initialized" << endl;
+}
+
+
+void Server::lockSpinLock(pthread_spinlock_t* lock) {
+//	cout << "trying to pass spin lock" << endl;
+	int ret = pthread_spin_lock(lock);
+
+	if (ret != 0) {
+		perror ("pthread_spin_lock error");
+		abort ();
+	}
+
+//	cout << "spin lock is locked" << endl;
+}
+
+void Server::unlockSpinLock(pthread_spinlock_t* lock) {
+	int ret = pthread_spin_unlock(lock);
+
+	if (ret != 0) {
+		perror ("pthread_spin_lock error");
+		abort ();
+	}
+
+//	cout << "spin lock is free" << endl;
+}
+
+void Server::initMutex(pthread_mutex_t* lock) {
+//	cout << "[Server::initMutex] Start" << endl;
+
+	int ret = pthread_mutex_init(lock, NULL);
+
+	if (ret != 0) {
+		perror ("pthread_mutex_init error");
+		abort ();
+	}
+
+//	cout << "mutex was initialized" << endl;
+}
+
+
+void Server::lockMutex(pthread_mutex_t* lock) {
+//	cout << "trying to pass mutex" << endl;
+	int ret = pthread_mutex_lock(lock);
+
+	if (ret != 0) {
+		perror ("pthread_mutex_lock error");
+		abort ();
+	}
+
+//	cout << "mutex is locked" << endl;
+}
+
+
+void Server::unlockMutex(pthread_mutex_t* lock) {
+	int ret = pthread_mutex_unlock(lock);
+
+	if (ret != 0) {
+		perror ("pthread_mutex_unlock error");
+		abort ();
+	}
+
+//	cout << "mutex is free" << endl;
+}

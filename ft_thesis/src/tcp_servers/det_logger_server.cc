@@ -34,6 +34,7 @@ using namespace std;
 typedef struct ServerProgressData {
     vector<uint64_t> packet_ids_vector;
     uint32_t index;
+    pthread_mutex_t lock;
 } ServerProgressData;
 
 
@@ -42,6 +43,7 @@ typedef struct PacketData {
     vector<gpal*> gpal_vector;
     uint8_t spal_index;
     uint8_t gpal_index;
+    pthread_mutex_t lock;
 } PacketData;
 
 typedef map<uint16_t, ServerProgressData* >::iterator SPDIterType;
@@ -56,7 +58,9 @@ class DetLoggerServer : public Server {
 
 private:
 	detDataMap detData;
+	pthread_mutex_t detData_mtx;
 	map<uint16_t, ServerProgressData* > progressData;
+	pthread_mutex_t progressData_mtx;
 
 	// progress data
 	ServerProgressData* getOrCreateServerProgressData(uint16_t mbId);
@@ -90,7 +94,8 @@ protected:
 
 public:
 	DetLoggerServer(int port) : Server(port) {
-		// do nothing
+		initMutex(&progressData_mtx);
+		initMutex(&detData_mtx);
 	}
  };
 
@@ -136,10 +141,14 @@ bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLe
 		printState();
 	} else {
 		cout << "Partial Progress Data State:" << endl;
+		lockMutex(&progressData_mtx);
 		for (SPDIterType iter = progressData.begin(); iter != progressData.end(); iter++) {
 			ServerProgressData* spd = iter->second;
+			lockMutex(&(spd->lock));
 			cout << "mbId: " << iter->first << ", number of packet ids: " << spd->index << endl;
+			unlockMutex(&(spd->lock));
 		}
+		unlockMutex(&progressData_mtx);
 	}
 
 	// ack/nack will be sent anyway.
@@ -188,9 +197,8 @@ bool DetLoggerServer::processGetProcessedPacketsRequest(void* obj, char* retVal,
 
 void DetLoggerServer::getProcessedPacketsForFirstVersion(ServerProgressData* spd, uint64_t* returnValue, int* retValLen) {
 
-	// todo add mutex
+	lockMutex(&(spd->lock));
 	vector<uint64_t> packetIds = spd->packet_ids_vector;
-	// todo free mutex
 
 	uint32_t returnedValIndex=0;
 	set<uint64_t> processedBases;
@@ -208,15 +216,15 @@ void DetLoggerServer::getProcessedPacketsForFirstVersion(ServerProgressData* spd
 		}
 	}
 
+	unlockMutex(&(spd->lock));
 	*retValLen = returnedValIndex * sizeof(uint64_t*);
 }
 
 
 void DetLoggerServer::getProcessedPacketsForAllVersions(ServerProgressData* spd, uint64_t* returnValue, int* retValLen) {
 
-	// todo add mutex
+	lockMutex(&(spd->lock));
 	vector<uint64_t> packetIds = spd->packet_ids_vector;
-	// todo free mutex
 
 	for (uint32_t i=0; i< spd->index; i++) {
 		returnValue[i] = packetIds[i];
@@ -224,6 +232,8 @@ void DetLoggerServer::getProcessedPacketsForAllVersions(ServerProgressData* spd,
 	}
 
 	*retValLen = spd->index * sizeof(uint64_t*);
+
+	unlockMutex(&(spd->lock));
 }
 
 
@@ -300,10 +310,16 @@ bool DetLoggerServer::processDeleteFirstPacketsRequest(void* obj, char* retVal, 
 
 void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBasesToRemove, ServerProgressData* spd) {
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] Start" << endl);
+
+	lockMutex(&(spd->lock));
+
+	cout << "spd->index before: " << spd->index << endl;
 	DEBUG_STDOUT(cout << "spd->index before: " << spd->index << endl);
 
 	int totalPackets = spd->index;
 	mbDataMap *mbData = NULL;
+
+	lockMutex(&detData_mtx);
 	if (detData.find(mbId) != detData.end()) {
 		DEBUG_STDOUT(cout << "mbId " << mbId << " exist in detData" << endl);
 		mbData = &(detData[mbId]);
@@ -313,6 +329,7 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBase
 		uint64_t packetToRemove = spd->packet_ids_vector[i];
 		deletePacketFromMbData(mbData, packetToRemove);
 	}
+	unlockMutex(&detData_mtx);
 
 	// todo I can reduce the memory consumption by using: http://stackoverflow.com/questions/7351899/remove-first-n-elements-from-a-stdvector
 
@@ -322,6 +339,9 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBase
 
 	cout << "Deleting " << totalPacketBasesToRemove << " packets" << endl;
 	DEBUG_STDOUT(cout << "spd->index after: " << spd->index << endl);
+
+	unlockMutex(&(spd->lock));
+
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deleteFirstPackets] End" << endl);
 }
 
@@ -332,6 +352,7 @@ void DetLoggerServer::freePacketData(PacketData* packetData) {
 		return;
 	}
 
+	lockMutex(&(packetData->lock));
 	vector<gpal*>* gp_vector = &(packetData->gpal_vector);
 	vector<spal*>* sp_vector = &(packetData->spal_vector);
 
@@ -351,19 +372,22 @@ void DetLoggerServer::freePacketData(PacketData* packetData) {
 	}
 	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] spals were freed" << endl);
 
+	unlockMutex(&(packetData->lock));
 	delete packetData;
 
-	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] Start" << endl);
+	DEBUG_STDOUT(cout << "[DetLoggerServer::freePacketData] End" << endl);
 }
 
 
 void DetLoggerServer::deletePacketFromMbData(mbDataMap *mbData, uint64_t packetToRemove) {
+	cout << "[DetLoggerServer::deletePacketFromMbData] Start" << endl;
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deletePacketFromMbData] Start" << endl);
 
 	if (mbData != NULL) {
 		DEBUG_STDOUT(cout << "packetToRemove: " << packetToRemove << endl);
 
 		if (mbData->find(packetToRemove) != mbData->end()) {
+			cout << "~packetToRemove: " << packetToRemove << ", ";
 			DEBUG_STDOUT(cout << "~packetToRemove: " << packetToRemove << endl);
 			PacketData *packetData = mbData->at(packetToRemove);
 
@@ -371,6 +395,7 @@ void DetLoggerServer::deletePacketFromMbData(mbDataMap *mbData, uint64_t packetT
 			mbData->erase(packetToRemove);
 		}
 	}
+	cout << "[DetLoggerServer::deletePacketFromMbData] End" << endl;
 	DEBUG_STDOUT(cout << "[DetLoggerServer::deletePacketFromMbData] End" << endl);
 }
 
@@ -392,6 +417,9 @@ bool DetLoggerServer::processRequest(void* obj, int command, char* retVal, int* 
 }
 
 void DetLoggerServer::updatePacketData(PacketData* packetData, PALSManager* pm) {
+	DEBUG_STDOUT(cout << "[DetLoggerServer::updatePacketData] Start" << endl);
+	lockMutex(&(packetData->lock));
+
 	// appending gpals
 	gpal* newGPalsList = pm->getGPalList();
 	for (int i=0; i< pm->getGPalSize(); i++) {
@@ -416,10 +444,15 @@ void DetLoggerServer::updatePacketData(PacketData* packetData, PALSManager* pm) 
 		packetData->spal_vector.push_back(sp);
 		packetData->spal_index++;
 	}
+
+	unlockMutex(&(packetData->lock));
+	DEBUG_STDOUT(cout << "[DetLoggerServer::updatePacketData] End" << endl);
 }
 
 void DetLoggerServer::convertPacketDataToPM(PALSManager* pm, PacketData* packetData) {
 	DEBUG_STDOUT(cout << "DetLoggerServer::convertPacketDataToPM" << endl);
+
+	lockMutex(&(packetData->lock));
 
 	uint8_t gpalsLen = packetData->gpal_index;
 	DEBUG_STDOUT(cout << "gpalsLen: " << unsigned(gpalsLen) << endl);
@@ -442,15 +475,19 @@ void DetLoggerServer::convertPacketDataToPM(PALSManager* pm, PacketData* packetD
 		DEBUG_STDOUT(cout << "spal[" << unsigned(i) << "]->var_id: " << currSPal->var_id << endl);
 	}
 
+	unlockMutex(&(packetData->lock));
+
 	DEBUG_STDOUT(cout << "[DetLoggerServer::convertPacketDataToPM] Done" << endl);
 }
 
 PacketData* DetLoggerServer::getOrCreatePacketData(PALSManager* pm) {
 	PacketData* packetData;
 
+	lockMutex(&detData_mtx);
 	if (detData.find(pm->getMBId()) == detData.end()) {
 		DEBUG_STDOUT(cout << "creating a new packetData for new mb: " << pm->getMBId() << endl);
 		packetData = new PacketData();
+		initMutex(&(packetData->lock));
 		mbDataMap mbData;
 		mbData.insert(make_pair(pm->getPacketId(), packetData));
 		detData.insert(make_pair(pm->getMBId(), mbData));
@@ -460,12 +497,14 @@ PacketData* DetLoggerServer::getOrCreatePacketData(PALSManager* pm) {
 		if (detData[pm->getMBId()].find(pm->getPacketId()) == detData[pm->getMBId()].end()) {
 			DEBUG_STDOUT(cout << "creating a new item for packet id: " << pm->getPacketId() << endl);
 			packetData = new PacketData();
+			initMutex(&(packetData->lock));
 			detData[pm->getMBId()].insert(make_pair(pm->getPacketId(), packetData));
 		} else {
 			DEBUG_STDOUT(cout << "updating item for existing packet id: " << pm->getPacketId() << endl);
 			packetData = detData[pm->getMBId()][pm->getPacketId()];
 		}
 	}
+	unlockMutex(&detData_mtx);
 
 	return packetData;
 }
@@ -474,6 +513,7 @@ PacketData* DetLoggerServer::getPacketData(uint16_t mbId, uint64_t packId) {
 	DEBUG_STDOUT(cout << "DetLoggerServer::getPacketData" << endl);
 	PacketData* packetData = NULL;
 
+	lockMutex(&detData_mtx);
 	if (detData.find(mbId) != detData.end()) {
 		DEBUG_STDOUT(cout << "mbId " << mbId << " exist in detData" << endl);
 
@@ -482,47 +522,59 @@ PacketData* DetLoggerServer::getPacketData(uint16_t mbId, uint64_t packId) {
 			packetData = detData[mbId][packId];
 		}
 	}
+	unlockMutex(&detData_mtx);
 
 	return packetData;
 }
 
 
 void DetLoggerServer::addPacketId(uint64_t pid, ServerProgressData* spd) {
+	lockMutex(&(spd->lock));
 	spd->packet_ids_vector.push_back(pid);
 	spd->index++;
+	unlockMutex(&(spd->lock));
 }
 
 ServerProgressData* DetLoggerServer::getOrCreateServerProgressData(uint16_t mbId) {
 	ServerProgressData* spd;
 
+	lockMutex(&progressData_mtx);
 	if (progressData.find(mbId) == progressData.end()) {
 		spd = new ServerProgressData();
+		initMutex(&(spd->lock));
 		progressData.insert(make_pair(mbId, spd));
 	} else {
 		spd = progressData[mbId];
 	}
+	unlockMutex(&progressData_mtx);
 
 	return spd;
 }
 
 ServerProgressData* DetLoggerServer::getServerProgressData(uint16_t mbId) {
 
+	ServerProgressData* spd = NULL;
+	lockMutex(&progressData_mtx);
+
 	if (progressData.find(mbId) != progressData.end()) {
-		return progressData[mbId];
+		spd = progressData[mbId];
 	}
 
-	return NULL;
+	unlockMutex(&progressData_mtx);
+	return spd;
 }
 
 
 void DetLoggerServer::printState() {
 	cout << "-------------------------------------" << endl;
+	lockMutex(&detData_mtx);
 	for (MbDataIterType mbIter = detData.begin(); mbIter != detData.end(); mbIter++) {
 		uint16_t mbId = mbIter->first;
 
 		for (PacketDataIterType pdIter = mbIter->second.begin(); pdIter != mbIter->second.end(); pdIter++) {
 			cout << "mbId: " << mbId << ", packetId: " << pdIter->first << ":" << endl;
 			PacketData* pd = pdIter->second;
+			lockMutex(&(pd->lock));
 
 			int gpalSize = pd->gpal_index;
 			int spalSize = pd->spal_index;
@@ -542,18 +594,23 @@ void DetLoggerServer::printState() {
 				cout << "spal[" << i << "]\t" << pd->spal_vector[i]->var_id << "\t" << pd->spal_vector[i]->seq_num << endl;
 			}
 
+			unlockMutex(&(pd->lock));
 			cout << "-------------------------------------" << endl;
 		}
 	}
+	unlockMutex(&detData_mtx);
 
 	printProgressDataState();
 }
 
 void DetLoggerServer::printProgressDataState() {
 	cout << "Progress Data State:" << endl;
+	lockMutex(&progressData_mtx);
+
 	for (SPDIterType iter = progressData.begin(); iter != progressData.end(); iter++) {
 		cout << "mbId: " << iter->first << ":" << endl;
 		ServerProgressData* spd = iter->second;
+		lockMutex(&(spd->lock));
 
 		int numOfPacketIds = spd->index;
 
@@ -563,8 +620,11 @@ void DetLoggerServer::printProgressDataState() {
 			cout << spd->packet_ids_vector[i] << ", ";
 		}
 
+		unlockMutex(&(spd->lock));
 		cout << "\n-------------------------------------" << endl;
 	}
+
+	unlockMutex(&progressData_mtx);
 }
 
 

@@ -48,6 +48,7 @@ bool spvdComparator(SinglePacketVersionData* a, SinglePacketVersionData* b) {
 typedef struct PacketVersionsData {
     vector<SinglePacketVersionData*> packet_versions;
     uint8_t index;
+    pthread_spinlock_t lock;
 } PacketVersionsData;
 
 typedef map<uint64_t, PacketVersionsData* >::iterator PVDIterType;
@@ -58,6 +59,7 @@ private:
 	// the key is packet id base (the received packet id from the client without the 5 right-most digits
 	// which represent the packet version).
 	map<uint64_t, PacketVersionsData* > packetsVersions;
+	pthread_mutex_t packets_versions_mtx;
 
 	PacketVersionsData* getOrCreateServerProgressData(uint64_t packetId);
 	void addPacketVersion(PacketVersionsData* packetVersions, WrappedPacketData* wpd);
@@ -83,7 +85,7 @@ protected:
 
 public:
 	PacketLoggerServer(int port) : Server(port) {
-		// do nothing
+		initMutex(&packets_versions_mtx);
 	}
  };
 
@@ -352,16 +354,19 @@ bool PacketLoggerServer::getPacket(uint64_t packId, unsigned char* retVal, int* 
 
 	DEBUG_STDOUT(cout << "packet id base is: " << packetIdBase << ", packet version is: " << unsigned(packetVersion) << endl);
 
+	lockMutex(&packets_versions_mtx);
 	if (packetsVersions.find(packetIdBase) != packetsVersions.end()) {
 		DEBUG_STDOUT(cout << "packIdBase " << packetIdBase << " exist in packetsVersions" << endl);
 		packetVersions = packetsVersions[packetIdBase];
 	}
+	unlockMutex(&packets_versions_mtx);
 
 	if (packetVersions == NULL) {
 		DEBUG_STDOUT(cout << "WARNING: received packet id doesn't exist!!" << endl);
 		return false;
 	}
 
+	lockSpinLock(&(packetVersions->lock));
 	uint8_t packetVersionsLen = packetVersions->index;
 	DEBUG_STDOUT(cout << "packetVersionsLen: " << unsigned(packetVersionsLen) << endl);
 
@@ -384,6 +389,8 @@ bool PacketLoggerServer::getPacket(uint64_t packId, unsigned char* retVal, int* 
 		*retValLen = max(*retValLen, (int)spvd->size);
 	}
 
+	unlockSpinLock(&(packetVersions->lock));
+
 	return true;
 }
 
@@ -397,21 +404,25 @@ bool PacketLoggerServer::deletePacket(uint64_t packId) {
 
 	DEBUG_STDOUT(cout << "packet id base is: " << packetIdBase << ", packet version is: " << unsigned(packetVersion) << endl);
 
+	lockMutex(&packets_versions_mtx);
 	if (packetsVersions.find(packetIdBase) != packetsVersions.end()) {
 		DEBUG_STDOUT(cout << "packIdBase " << packetIdBase << " exist in packetsVersions" << endl);
 		packetVersions = packetsVersions[packetIdBase];
 	}
+	unlockMutex(&packets_versions_mtx);
 
 	if (packetVersions == NULL) {
 		DEBUG_STDOUT(cout << "WARNING: received packet id doesn't exist!!" << endl);
 		return true;
 	}
 
+	lockSpinLock(&(packetVersions->lock));
 	uint8_t packetVersionsLen = packetVersions->index;
 	DEBUG_STDOUT(cout << "packetVersionsLen: " << unsigned(packetVersionsLen) << endl);
 
 	if (packetVersion < packetVersionsLen) {
 		DEBUG_STDOUT(cout << "WARNING: We can't delete partial packet versions." << endl);
+		unlockSpinLock(&(packetVersions->lock));
 		return false;
 	}
 
@@ -423,9 +434,12 @@ bool PacketLoggerServer::deletePacket(uint64_t packId) {
 		delete spvd;
 	}
 	pvd->clear();
-
+	unlockSpinLock(&(packetVersions->lock));
 	delete packetVersions;
+
+	lockMutex(&packets_versions_mtx);
 	packetsVersions.erase(packetIdBase);
+	unlockMutex(&packets_versions_mtx);
 
 	return true;
 }
@@ -441,14 +455,16 @@ void PacketLoggerServer::addPacketVersion(PacketVersionsData* packetVersions, Wr
 
 	// copy data content
 	uint16_t size = wpd->size;
-	unsigned char* data = new unsigned char[size];	// todo I don't free this memory
+	unsigned char* data = new unsigned char[size];
 	memcpy(data, wpd->data, size);
 
 	singlePacketData->data = data;
 
+	lockSpinLock(&(packetVersions->lock));
 	// add to packet versions vector
 	packetVersions->packet_versions.push_back(singlePacketData);
 	packetVersions->index++;
+	unlockSpinLock(&(packetVersions->lock));
 }
 
 PacketVersionsData* PacketLoggerServer::getOrCreateServerProgressData(uint64_t packetId) {
@@ -469,21 +485,27 @@ PacketVersionsData* PacketLoggerServer::getOrCreateServerProgressData(uint64_t p
 //	}
 
 
+	lockMutex(&packets_versions_mtx);
 	if (!packetsVersions.count(packetIdBase)) {
 		pvd = new PacketVersionsData();
+		initSpinLock(&(pvd->lock));
 		packetsVersions[packetIdBase] = pvd;
 	} else {
 		pvd = packetsVersions[packetIdBase];
 	}
+	unlockMutex(&packets_versions_mtx);
 
 	return pvd;
 }
 
 void PacketLoggerServer::printState() {
+	lockMutex(&packets_versions_mtx);
+
 	for (PVDIterType iter = packetsVersions.begin(); iter != packetsVersions.end(); iter++) {
 		cout << "packet id base: " << iter->first << ":" << endl;
 		PacketVersionsData* pvd = iter->second;
 
+		lockSpinLock(&(pvd->lock));
 		int numOfPacketVersions = pvd->index;
 
 		cout << "number of packet versions: " << numOfPacketVersions << "\n";
@@ -501,9 +523,12 @@ void PacketLoggerServer::printState() {
 
 			cout << string(dataToPrint) << endl;
 		}
+		unlockSpinLock(&(pvd->lock));
 
 		cout << "-------------------------------------" << endl;
 	}
+
+	unlockMutex(&packets_versions_mtx);
 }
 
 

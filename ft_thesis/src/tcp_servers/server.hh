@@ -82,6 +82,13 @@ class Server {
 		void printMsg(char* msg, int msgLen);
 
 	protected:
+		void initSpinLock(pthread_spinlock_t* lock);
+		void lockSpinLock(pthread_spinlock_t* lock);
+		void unlockSpinLock(pthread_spinlock_t* lock);
+		void initMutex(pthread_mutex_t* lock);
+		void lockMutex(pthread_mutex_t* lock);
+		void unlockMutex(pthread_mutex_t* lock);
+
 		virtual void* deserializeClientRequest(int command, char* msg, int msgLen);
 		virtual bool processRequest(void* obj, int command, char* retVal, int* retValLen);
 		virtual void freeDeserializedObject(void* obj, int command);
