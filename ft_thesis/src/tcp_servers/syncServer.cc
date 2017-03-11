@@ -1,10 +1,6 @@
 /*
  * based on: http://www.tenouk.com/Module41.html
  */
-#include "server.hh"
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +9,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "server.hh"
 
 
 
@@ -99,24 +96,8 @@ bool Server::run() {
 				if(FD_ISSET(*currIter, &read_fds)) {
 					DEBUG_STDOUT(cout << "start handling new request from sockfd: " << *currIter << endl);
 
-					// todo There is a design bug using select and multi-threading. For now
-					// i'm using sync mode rather than multi-threading. Later I need to user
-					// epoll instead but it doesn't work on Windows.
-					/*
-					pthread_mutex_lock(&master_set_mtx);
-					// remove from until we will finish reading from this socket (then we will add it back)
-					FD_CLR(*currIter, &master);
-					pthread_mutex_unlock(&master_set_mtx);
-
-					ThreadArgs threadArgs;
-					threadArgs.server = this;
-					threadArgs.sockfd = *currIter;
-					pthread_t t1;
-					pthread_create(&t1, NULL, &Server::handleClientRequestThreadHelper, (void*)&threadArgs);
-					*/
-
 					// sync handling
-					handleClientRequestThread(*currIter);
+					handleClientRequest(*currIter);
 					break;	// todo It makes me give higher priority to the first registered clients.
 				}
 			}
@@ -180,7 +161,7 @@ void Server::removeClient(int sockfdToRemove, int numOfReceivedBytes) {
 	pthread_mutex_unlock(&master_set_mtx);
 }
 
-void Server::handleClientRequestThread(int sockfd) {
+void Server::handleClientRequest(int sockfd) {
 	DEBUG_STDOUT(cout << "about to read message from sockfd: " << sockfd << endl);
 	char* msg = new char[SERVER_BUFFER_SIZE+NUM_OF_DIGITS_FOR_MSG_LEN_PREFIX+NUM_OF_DIGITS_FOR_RET_VAL_STATUS];
 	int msgLen;	// msgLen doesn't include the command chars (as well as the msgLen digits themselves)
@@ -189,11 +170,11 @@ void Server::handleClientRequestThread(int sockfd) {
 	int retValLen = 0;
 
 	readCommonClientRequest(sockfd, msg, &msgLen, &command);
-	DEBUG_STDOUT(cout << "[Server::handleClientRequestThread] msgLen: " << msgLen << ", command: " << command << endl);
+	DEBUG_STDOUT(cout << "[Server::handleClientRequest] msgLen: " << msgLen << ", command: " << command << endl);
 
 	if (msgLen == -1) {
 		delete msg;
-		DEBUG_STDOUT(cout << "[Server::handleClientRequestThread] stop reading from sockfd " << sockfd << endl);
+		DEBUG_STDOUT(cout << "[Server::handleClientRequest] stop reading from sockfd " << sockfd << endl);
 		return;
 	}
 

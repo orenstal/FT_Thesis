@@ -33,7 +33,7 @@ public:
 	void push(int port, Packet *p);
 	Packet *pull(int port);
 
-	uint64_t extractVlanByLevel(Packet *p, uint8_t level);
+	uint64_t extractVlanByLevel(Packet *p, uint16_t level);
 
 	void recover();
 	bool isRecover();
@@ -48,6 +48,7 @@ private:
 	uint16_t _mbId;
 	int _mbState;
 	Client *detLoggerClient;
+	uint16_t _vlanLevelOffset;	// it should be 1 if the packet has vlan tag for tsa, 0 otherwise
 
 	void* prepareGetPalsByMBIdAndPackId(uint16_t mbId, uint64_t packId);
 

@@ -123,7 +123,7 @@ void* DetLoggerServer::deserializeClientStoreRequest(int command, char* msg, int
 }
 
 bool DetLoggerServer::processStoreRequest(void* obj, char* retVal, int* retValLen) {
-	cout << "DetLoggerServer::processStoreRequest" << endl;
+//	cout << "DetLoggerServer::processStoreRequest" << endl;
 	DEBUG_STDOUT(cout << "DetLoggerServer::processStoreRequest" << endl);
 	PALSManager* pm = (PALSManager*)obj;
 

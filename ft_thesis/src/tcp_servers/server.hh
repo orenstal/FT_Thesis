@@ -8,6 +8,8 @@
 #ifndef TCP_SERVERS_SERVER_HH_
 #define TCP_SERVERS_SERVER_HH_
 
+//#define SYNC_SERVER true
+
 #include <pthread.h>
 #include <stdio.h>
 #include <string>
@@ -17,6 +19,21 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+
+
+#ifndef SYNC_SERVER
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/epoll.h>
+#include <errno.h>
+#include <map>
+#include <set>
+#endif
+
 
 
 #define DEBUG false
@@ -39,40 +56,59 @@
 #define RESPONSE_STATE_FAILURE "0"
 using namespace std;
 
+#ifndef SYNC_SERVER
 class Server;
+#define MAXEVENTS 64
+
+typedef struct ThreadInfo {
+	string srcHostName;
+	int id;
+	set<int> *sockfds;
+	int efd;
+	struct epoll_event event;
+	struct epoll_event *events;
+	pthread_spinlock_t lock;
+} ThreadInfo;
 
 struct ThreadArgs {
 	Server* server;
-	int sockfd;
+	ThreadInfo* info;
 };
+#endif
+
 
 class Server {
 	private:
 		int port;
-		pthread_mutex_t master_set_mtx;			// mutex for master fd_set protection
-		fd_set master;					// master file descriptor list
-		fd_set read_fds;				// temp file descriptor list for select()
 		struct sockaddr_in serveraddr;	// server address
-		struct sockaddr_in clientaddr;	// client address
-		int fdmax;						// maximum file descriptor number
 		int listener;					// server listening socket descriptor
-		int newfd;						// newly accept()ed socket descriptor
 		int yes;						// for setsockopt() SO_REUSEADDR, below
-		set<int> connectedClients;
+
+#ifdef SYNC_SERVER
+			pthread_mutex_t master_set_mtx;	// mutex for master fd_set protection
+			fd_set master;					// master file descriptor list
+			fd_set read_fds;				// temp file descriptor list for select()
+			struct sockaddr_in clientaddr;	// client address
+			int fdmax;						// maximum file descriptor number
+			int newfd;						// newly accept()ed socket descriptor
+			set<int> connectedClients;
+#else
+			int _threadIdSequencer;
+			int efd;
+			struct epoll_event event;
+			struct epoll_event *events;
+			map<string, ThreadInfo*> threadsInfo;
+			map<int, pthread_t*> activeThreads;
+
+			pthread_spinlock_t threadsToDeleteLock;
+			set<pthread_t*> threadsToDelete;
+#endif
 
 		void addNewClient();
 		void removeClient(int sockfdToRemove, int numOfReceivedBytes);
+		void handleClientRequest(int sockfd);
 
-		void handleClientRequestThread(int sockfd);
 
-		static void* handleClientRequestThreadHelper(void* voidArgs) {
-			struct ThreadArgs* args = (struct ThreadArgs*)voidArgs;
-			Server* server = args->server;
-			int sockfd = args->sockfd;
-			server->handleClientRequestThread(sockfd);
-
-			return NULL;
-		}
 
 		void readCommonClientRequest(int sockfd, char* msg, int* msgLen, int* command);
 		int receiveMsgFromClient (int clientSockfd, int totalReceivedBytes, char* msg, int maximalReceivedBytes);
@@ -80,6 +116,34 @@ class Server {
 		void writeResponseToClient(int sockfd, bool succeed, char* retVal, int retValLen);
 		int checkLength (char* num, int length, int minimalExpectedValue);
 		void printMsg(char* msg, int msgLen);
+
+		//
+
+#ifndef SYNC_SERVER
+		int make_socket_non_blocking(int sfd);
+		void create_and_bind();
+		void initThreadInfo (ThreadInfo* info, string hostName);
+		void doRemoveClient(int sockfdToRemove, ThreadInfo* info);
+		ThreadInfo* getOrCreateThreadInfo (string hostName, bool* shouldCreateNewThread);
+		ThreadInfo* getThreadInfoBySockfd(int sockfd);
+		void addSockfdToThreadInfo(ThreadInfo* info, int infd);
+		void removeOrphanThreads();
+		void runThread(ThreadInfo* info);
+		void addThreadToDeleteSet(pthread_t* th);
+		void deleteThreadsFromSet();
+
+
+		static void* threadRunnerHelper(void* voidArgs) {
+			cout << "[threadRunnerHelper] current thread id: " << pthread_self() << endl;
+			ThreadArgs* args = (ThreadArgs*)voidArgs;
+			Server* server = args->server;
+			ThreadInfo* info = args->info;
+			server->runThread(info);
+
+			delete args;
+			return NULL;
+		}
+#endif
 
 	protected:
 		void initSpinLock(pthread_spinlock_t* lock);

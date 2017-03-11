@@ -140,9 +140,11 @@ int
 PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
 {
 	bool isMasterMode = true;
+	int vlanLevelOffset = 1;
 
 	if (Args(conf, this, errh)
 	.read_p("MASTER", isMasterMode)
+	.read_p("VLAN_LEVEL_OFFSET", BoundedIntArg(0, 3), vlanLevelOffset)
 	.complete() < 0)
 		return -1;
 
@@ -153,6 +155,10 @@ PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
 		_mbState = SLAVE;
 	}
 	cout << "isMaster mode? " << isMasterMode << endl;
+
+	_vlanLevelOffset = vlanLevelOffset;
+
+	cout << "vlan level offset is: " << _vlanLevelOffset << endl;
 
 	if (isSlave()) {
 		cout << "[slave mode] connecting to det logger" << endl;
@@ -166,9 +172,9 @@ PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
 }
 
 uint64_t
-PreparePacket::extractVlanByLevel(Packet *p, uint8_t level)
+PreparePacket::extractVlanByLevel(Packet *p, uint16_t level)
 {
-	DEBUG_STDOUT(cout << "[PreparePacket] Extracting vlan level: " << unsigned(level) << endl);
+	DEBUG_STDOUT(cout << "[PreparePacket] Extracting vlan level: " << level << endl);
 
 	if (p == 0) {
 		cout << "[PreparePacket] Error: invalid packet" << endl;
@@ -176,7 +182,7 @@ PreparePacket::extractVlanByLevel(Packet *p, uint8_t level)
 	}
 
     assert(!p->mac_header() || p->mac_header() == p->data());
-    if (level < 1 || level > 3) {
+    if (level > 3) {
     	cout << "[PreparePacket] Error: wrong level!" << endl;
     	return 0;
     }
@@ -189,7 +195,7 @@ PreparePacket::extractVlanByLevel(Packet *p, uint8_t level)
 		return ntohs(tci);
 
 	} else {
-		cout << "[PreparePacket] Error: invalid ethertype" << ntohs(vlan->ether_vlan_proto) << endl;
+		cout << "[PreparePacket] Error: invalid ethertype" << ntohs(vlan->ether_vlan_proto) << " expected: " << htons(ETHERTYPE_8021Q) << endl;
 	    return 0;
     }
 }
@@ -231,9 +237,10 @@ void* PreparePacket::getPals(uint64_t packId) {
 Packet *
 PreparePacket::smaction(Packet *p)	// main logic
 {
-	uint64_t innerVlan = extractVlanByLevel(p, 3);
-	uint64_t middleVlan = extractVlanByLevel(p, 2);
-	uint64_t outerVlan = extractVlanByLevel(p, 1);
+	uint16_t innerLevel = _vlanLevelOffset + 2;
+	uint64_t innerVlan = extractVlanByLevel(p, innerLevel);
+	uint64_t middleVlan = extractVlanByLevel(p, innerLevel-1);
+	uint64_t outerVlan = extractVlanByLevel(p, innerLevel-2);
 
 	uint64_t unifiedId;
 	if (innerVlan > 0 && middleVlan > 0 && outerVlan > 0) {
@@ -280,7 +287,6 @@ PreparePacket::smaction(Packet *p)	// main logic
 
 	SET_PALS_MANAGER_REFERENCE_ANNO(p, (uintptr_t)pm);
 	DEBUG_STDOUT(cout << "set pals_manager was completed." << endl);
-
 
 	return p;
 
@@ -382,7 +388,8 @@ PreparePacket::write_handler(const String &in_str, Element *e, void *thunk, Erro
 void
 PreparePacket::add_handlers()
 {
-	add_data_handlers("mb_id", Handler::h_read | Handler::h_write, &_mbId);
+//	add_data_handlers("mb_id", Handler::h_read | Handler::h_write, &_mbId);
+//	add_data_handlers("vlanLevelOffset", Handler::h_read | Handler::h_write, &_vlanLevelOffset);
 
 	add_read_handler("state", read_handler, H_MB_STATE_CALL);
 	add_write_handler("toMaster", write_handler, H_TO_MASTER_CALL);

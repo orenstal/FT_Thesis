@@ -91,6 +91,7 @@ public:
 
 void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, int msgLen) {
 	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl);
+//	cout << "[PacketLoggerServer::deserializeClientStoreRequest] Start" << endl;
 
 	WrappedPacketData* wpd = new WrappedPacketData;
 	uint64_t *q = (uint64_t*)msg;
@@ -109,6 +110,8 @@ void* PacketLoggerServer::deserializeClientStoreRequest(int command, char* msg, 
 	memcpy(data, packetData, wpd->size);
 
 	wpd->data = data;
+
+//	cout << "[PacketLoggerServer::deserializeClientStoreRequest] End" << endl;
 	return (void*)wpd;
 }
 
@@ -188,6 +191,7 @@ void* PacketLoggerServer::deserializeClientDeletePacketsRequest(int command, cha
 
 void* PacketLoggerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
 	DEBUG_STDOUT(cout << "PacketLoggerServer::deserializeClientStoreRequest" << endl);
+//	cout << "PacketLoggerServer::deserializeClientRequest" << endl;
 
 	if (command == STORE_COMMAND_TYPE) {
 		return deserializeClientStoreRequest(command, msg, msgLen);

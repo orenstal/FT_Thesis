@@ -27,9 +27,9 @@ Socket(TCP, 10.0.0.7, 9999)	// listen to incoming socket on port 9999
 
 FromDevice("h7-eth0")
 	-> classifier
-	-> Strip(16) /* strip the 4 tsa vlan layers: 1 for routing, 3 for packet id*/
+	-> Strip(12) /* strip the 4 tsa vlan layers for packet id*/
 	-> ipClassifier
-	-> Unstrip(16)
+	-> Unstrip(12)
 	-> Print()
 	-> pp2
 	-> ivn2

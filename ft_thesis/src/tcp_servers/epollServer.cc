@@ -45,9 +45,9 @@ class EpollServer {
 private:
 	int _threadIdSequencer;
 	int yes;
-	int _port;
+	int port;
 	struct sockaddr_in serveraddr;	// server address
-	int sfd;
+	int listener;
 	int efd;
 	struct epoll_event event;
 	struct epoll_event *events;
@@ -92,9 +92,9 @@ public:
 	void run();
 };
 
-EpollServer::EpollServer(int port) {
+EpollServer::EpollServer(int serverPort) {
 	yes = 1;
-	_port = port;
+	port = serverPort;
 	_threadIdSequencer = 0;
 }
 
@@ -120,14 +120,14 @@ int EpollServer::make_socket_non_blocking (int sfd) {
 
 void EpollServer::create_and_bind () {
 
-	if((sfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+	if((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
 		cout << "ERROR: Server-socket() error lol!" << endl;
 //	  DEBUG_STDOUT(cout << "ERROR: Server-socket() error lol!" << endl);
 		exit(1);
 	}
 
   	// prevent "address already in use" error
-	if(setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+	if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
 		cout << "ERROR: Server-setsockopt() error lol!" << endl;
 //  		DEBUG_STDOUT(cout << "ERROR: Server-setsockopt() error lol!" << endl);
   		exit(1);
@@ -136,17 +136,17 @@ void EpollServer::create_and_bind () {
   	// bind
   	serveraddr.sin_family = AF_INET;
   	serveraddr.sin_addr.s_addr = INADDR_ANY;
-  	serveraddr.sin_port = htons(_port);
+  	serveraddr.sin_port = htons(port);
   	memset(&(serveraddr.sin_zero), '\0', 8);
 
-  	if(bind(sfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
+  	if(bind(listener, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
   		cout << "ERROR: Server-bind() error lol!" << endl;
 //  		DEBUG_STDOUT(cout << "ERROR: Server-bind() error lol!" << endl);
   		exit(1);
   	}
 
   	// listen
-  	if(listen(sfd, 1000) == -1) {
+  	if(listen(listener, 1000) == -1) {
   		cout << "ERROR: Server-listen() error lol!" << endl;
 //  		 DEBUG_STDOUT(cout << "ERROR: Server-listen() error lol!" << endl);
   		 exit(1);
@@ -160,10 +160,10 @@ void EpollServer::create_and_bind () {
 void EpollServer::init() {
 	create_and_bind();
 
-	if (make_socket_non_blocking(sfd) == -1)
+	if (make_socket_non_blocking(listener) == -1)
 		exit(1);
 
-	if (listen (sfd, SOMAXCONN) == -1) {
+	if (listen (listener, SOMAXCONN) == -1) {
 		cout << "ERROR: Server-listen() error lol!" << endl;
 //		DEBUG_STDOUT(cout << "ERROR: Server-listen() error lol!" << endl);
 		exit(1);
@@ -175,10 +175,10 @@ void EpollServer::init() {
 		exit(1);
 	}
 
-	event.data.fd = sfd;
+	event.data.fd = listener;
 	event.events = EPOLLIN;		//event.events = EPOLLIN | EPOLLET;
 
-	if (epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event) == -1) {
+	if (epoll_ctl(efd, EPOLL_CTL_ADD, listener, &event) == -1) {
 		cout << "ERROR: epoll_ctl() error lol!" << endl;
 		exit(1);
 	}
@@ -237,7 +237,7 @@ void EpollServer::addNewClient() {
 		char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
 		in_len = sizeof in_addr;
-		infd = accept (sfd, &in_addr, &in_len);
+		infd = accept (listener, &in_addr, &in_len);
 		if (infd == -1) {
 			if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
 				/* We have processed all incoming
@@ -448,7 +448,7 @@ void EpollServer::run() {
 //				close(events[i].data.fd);
 				continue;
 
-			} else if (sfd == events[i].data.fd) {
+			} else if (listener == events[i].data.fd) {
 				/* We have a notification on the listening socket, which
 	               means one or more incoming connections. */
 				addNewClient();
@@ -466,7 +466,7 @@ void EpollServer::run() {
 	}
 
 	free (events);
-	close(sfd);
+	close(listener);
 }
 
 void EpollServer::runThread(ThreadInfo* info) {

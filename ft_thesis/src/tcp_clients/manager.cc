@@ -206,24 +206,43 @@ bool Manager::clearReplayedPackets(uint16_t masterMbId, DetLoggerClient *detLogg
 				getCommonProcessedPacketIds(masterProcessedPacketIds, slaveProcessedPacketIds, numeric_limits<int>::max(), alreadyReplayedPackets, orphanSlavePackets);
 	}
 
-	if (commonProcessedPacketIds->size() > 0) {
-		deleteFirstPacketsRequest(detLoggerClient, masterMbId, commonProcessedPacketIds->size());
+	if (commonProcessedPacketIds->size() == 0 && masterProcessedPacketIds->size() < 2*slaveProcessedPacketIds->size()) {
+		// this case shouldn't happen - it means that we have a problem in which the lists are not cleared never (the number 2 is
+		// the number of versions for each packet base).
+		printf("about to delete all packets (%d) from master det logger\n", masterProcessedPacketIds->size());
+		deleteFirstPacketsRequest(detLoggerClient, masterMbId, masterProcessedPacketIds->size());
+		printf("about to delete all packets (%d) from slave det logger\n", slaveProcessedPacketIds->size());
+		deleteFirstPacketsRequest(slaveDetLoggerClient, slaveMbId, slaveProcessedPacketIds->size());
+	} else {
+		// this part is for regular behavior
+		if (commonProcessedPacketIds->size() > 0) {
+			printf("about to delete first packets from det logger\n");
+			deleteFirstPacketsRequest(detLoggerClient, masterMbId, commonProcessedPacketIds->size());
+			printf("DONE - about to delete first packets from det logger\n");
+		}
+
+		if (orphanSlavePackets->size() > 0) {
+			commonProcessedPacketIds->insert(commonProcessedPacketIds->end(), orphanSlavePackets->begin(), orphanSlavePackets->end());
+		}
+
+		if (commonProcessedPacketIds->size() > 0) {
+	//		deleteFirstPacketsRequest(detLoggerClient, masterMbId, commonProcessedPacketIds->size());
+			printf("about to delete first packets from slave det logger\n");
+			deleteFirstPacketsRequest(slaveDetLoggerClient, slaveMbId, commonProcessedPacketIds->size());
+			printf("DONE - about to delete first packets from slave det logger\n");
+
+			printf("creating DeletePackets object\n");
+			DeletePackets* deletePacketsData = createDeletePacketsData(commonProcessedPacketIds);
+			printf("DONE - creating DeletePackets object\n");
+			sendDeletePacketsPacketsRequest(packetLoggerClient, deletePacketsData);
+			printf("SONE - sending deletePackets to packet logger\n");
+			delete deletePacketsData;
+		}
+
+		printf("%d packets were deleted successfully\n", commonProcessedPacketIds->size());
 	}
 
-	if (orphanSlavePackets->size() > 0) {
-		commonProcessedPacketIds->insert(commonProcessedPacketIds->end(), orphanSlavePackets->begin(), orphanSlavePackets->end());
-	}
 
-	if (commonProcessedPacketIds->size() > 0) {
-//		deleteFirstPacketsRequest(detLoggerClient, masterMbId, commonProcessedPacketIds->size());
-		deleteFirstPacketsRequest(slaveDetLoggerClient, slaveMbId, commonProcessedPacketIds->size());
-
-		DeletePackets* deletePacketsData = createDeletePacketsData(commonProcessedPacketIds);
-		sendDeletePacketsPacketsRequest(packetLoggerClient, deletePacketsData);
-		delete deletePacketsData;
-	}
-
-	printf("%d packets were deleted successfully\n", commonProcessedPacketIds->size());
 	printf("[Manager::clearReplayedPackets] End\n");
 
 	delete masterProcessedPacketIds;
@@ -510,6 +529,7 @@ vector<uint64_t>* Manager::getCommonProcessedPacketIds(vector<uint64_t>* masterP
 
 	printf("orphanSlavePackets size: %d\n", orphanSlavePackets->size());
 	printf("%d different packets should be deleted (%d different bases)\n", actualNumOfPacketsToDelete, packetBasesToDelete.size());
+	printf("commonProcessed size: %d\n", commonProcessed->size());
 	DEBUG_STDOUT(printf("returned vector size is: %d\n", slaveProcessedPacketIds->size()));
 	DEBUG_STDOUT(printf("[Manager::getCommonProcessedPacketIds] End\n"));
 
@@ -561,7 +581,7 @@ void Manager::setSlaveOrphanPacketIds(uint64_t packetId,
 	}
 
 	if (!isFound) {
-		printf("can't find packet id (%d) in slave. clearing orphan vector..\n");
+		printf("can't find packet id (%" PRIu16 ") in slave. clearing orphan vector..\n", packetId);
 		orphanSlavePackets->clear();
 	}
 

@@ -1,12 +1,13 @@
 # based on: http://stackoverflow.com/questions/5191436/creating-two-separate-executables-from-a-makefile-g
 SERVER_ROOT = ./tcp_servers
 CLIENT_ROOT = ./tcp_clients
+SERVER_FILE = asyncServer.cc
 CC = g++
 CFLAGS = -c -Wall -DDEBUG -g
 LDFLAGS = -std=c++11 -lpthread -pthread# -Wl,--no-as-needed
 
 # Det Logger Server
-DET_LOGGER_SERVER_SOURCES = $(SERVER_ROOT)/server.cc $(SERVER_ROOT)/det_logger_server.cc #./pal_api/pals_manager_test.cpp #ft_thesis.cpp pushPacketId.cpp
+DET_LOGGER_SERVER_SOURCES = $(SERVER_ROOT)/$(SERVER_FILE) $(SERVER_ROOT)/det_logger_server.cc #./pal_api/pals_manager_test.cpp #ft_thesis.cpp pushPacketId.cpp
 DET_LOGGER_SERVER_OBJECTS = $(DET_LOGGER_SERVER_SOURCES:.cpp=.o)
 DET_LOGGER_SERVER_EXECUTABLE = detLoggerServer
 
@@ -28,7 +29,7 @@ DET_LOGGER_SERVER_EXECUTABLE = detLoggerServer
 
 
 # Wrapped Packets Logger Server
-PACKETS_LOGGER_SERVER_SOURCES = $(SERVER_ROOT)/server.cc $(SERVER_ROOT)/packets_logger_server.cc
+PACKETS_LOGGER_SERVER_SOURCES = $(SERVER_ROOT)/$(SERVER_FILE) $(SERVER_ROOT)/packets_logger_server.cc
 PACKETS_LOGGER_SERVER_OBJECTS = $(PACKETS_LOGGER_SERVER_SOURCES:.cpp=.o)
 PACKETS_LOGGER_SERVER_EXECUTABLE = packetsLoggerServer
 
