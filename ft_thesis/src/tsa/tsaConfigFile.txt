@@ -1,0 +1,7 @@
+# mapping the middleboxes to switches
+2 s2 00:00:00:00:00:02
+6 s6 00:00:00:00:00:06
+7 s6 00:00:00:00:00:07
+
+# sender packets switch
+1 s1 00:00:00:00:00:01
