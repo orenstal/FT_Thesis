@@ -101,10 +101,11 @@ public:
 	int replay(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets);
 	bool clearReplayedPackets(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsBasesToDelete, set<uint64_t> *alreadyReplayedPackets);
 
-	static int runReplayTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets);
-	static void runClearTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets);
-	static void runManagerAutomatically(Manager *manager, int timeIntervalInMs, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
+	static int runReplayTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId);
+	static void runClearTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId);
+	static void runManagerAutomatically(Manager *manager, uint16_t masterMbId, int timeIntervalInMs, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
 	static void runManagerManually(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
+	static uint16_t getMasterMbId(string command);
 
 	static void connectToServersForRecovery(DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
 };
@@ -114,22 +115,22 @@ Manager::Manager()
 }
 
 void Manager::init() {
-	masterSlaveMapping.insert(make_pair(1,2));
-	MbData* mb1Data = new MbData;
-	mb1Data->mbId = 1;
-	mb1Data->addressLen = 8;
-	memset(mb1Data->ipAddress, '\0', MAX_ADDRESS_LEN);
-	memcpy(mb1Data->ipAddress, "10.0.0.6", mb1Data->addressLen);
-	mb1Data->port = MB_PORT;
-	mbData.insert(make_pair(1, mb1Data));
+	masterSlaveMapping.insert(make_pair(6,7));
+	MbData* mb6Data = new MbData;
+	mb6Data->mbId = 6;
+	mb6Data->addressLen = 8;
+	memset(mb6Data->ipAddress, '\0', MAX_ADDRESS_LEN);
+	memcpy(mb6Data->ipAddress, "10.0.0.6", mb6Data->addressLen);
+	mb6Data->port = MB_PORT;
+	mbData.insert(make_pair(6, mb6Data));
 
-	MbData* mb2Data = new MbData;
-	mb2Data->mbId = 2;
-	mb2Data->addressLen = 8;
-	memset(mb2Data->ipAddress, '\0', MAX_ADDRESS_LEN);
-	memcpy(mb2Data->ipAddress, "10.0.0.7", mb2Data->addressLen);
-	mb2Data->port = MB_PORT;
-	mbData.insert(make_pair(2, mb2Data));
+	MbData* mb7Data = new MbData;
+	mb7Data->mbId = 7;
+	mb7Data->addressLen = 8;
+	memset(mb7Data->ipAddress, '\0', MAX_ADDRESS_LEN);
+	memcpy(mb7Data->ipAddress, "10.0.0.7", mb7Data->addressLen);
+	mb7Data->port = MB_PORT;
+	mbData.insert(make_pair(7, mb7Data));
 
 }
 
@@ -698,26 +699,27 @@ void Manager::deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, 
 	DEBUG_STDOUT(printf("[Manager::deleteFirstPacketsRequest] End\n"));
 }
 
-int Manager::runReplayTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets) {
-	printf("start replaying mb 1\n");
-	return manager->replay(1, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets);
+int Manager::runReplayTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId) {
+	printf("start replaying mb %d\n", masterMbId);
+	return manager->replay(masterMbId, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets);
 }
 
-void Manager::runClearTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets) {
-	printf("start clearing mb 1\n");
-	manager->clearReplayedPackets(1, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, maxPacketsToDelete, alreadyReplayedPackets);
+void Manager::runClearTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId) {
+	printf("start clearing mb %d\n", masterMbId);
+	manager->clearReplayedPackets(masterMbId, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, maxPacketsToDelete, alreadyReplayedPackets);
 }
 
-void Manager::runManagerAutomatically(Manager *manager, int timeIntervalInMs, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient) {
-	cout << "sleepInterval is: " << timeIntervalInMs << " ms"<< endl;
+void Manager::runManagerAutomatically(Manager *manager, uint16_t masterMbId, int timeIntervalInMs, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient) {
+	cout << "sleepInterval is: " << timeIntervalInMs << " ms" << endl;
+	cout << "masterMbId is: " << masterMbId << endl;
 	set<uint64_t> *alreadyReplayedPackets = new set<uint64_t>;
 
 	while(true) {
 		usleep(timeIntervalInMs*1000);
 		cout << "Invoke replay" << endl;
-		int maxPacketsToDelete = Manager::runReplayTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets);
+		int maxPacketsToDelete = Manager::runReplayTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets, masterMbId);
 		cout << "Invoke clear" << endl;
-		Manager::runClearTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, maxPacketsToDelete, alreadyReplayedPackets);
+		Manager::runClearTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, maxPacketsToDelete, alreadyReplayedPackets, masterMbId);
 	}
 
 	alreadyReplayedPackets->clear();
@@ -730,14 +732,17 @@ void Manager::runManagerManually(Manager *manager, DetLoggerClient *detLoggerCli
 
 	while (true) {
 		cout << "\n--------------------------------" << endl;
-		cout << "Enter 'r' for replay packets, 'c' for clear common packets or 'e' for exit" << endl;
+		cout << "Enter 'r <masterMbId>' for replay packets, 'c <masterMbId>' for clear common packets or 'e' for exit" << endl;
 		string command;
 		getline(cin, command);
 
 		if (command[0] == 'r') {
-			Manager::runReplayTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets);
+			cout << "command size is: " << command.size() << ", command is: " << command << endl;
+			int masterMbId = getMasterMbId(command);
+			Manager::runReplayTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets, masterMbId);
 		} else if (command[0] == 'c') {
-			Manager::runClearTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, numeric_limits<int>::max(), alreadyReplayedPackets);
+			int masterMbId = getMasterMbId(command);
+			Manager::runClearTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, numeric_limits<int>::max(), alreadyReplayedPackets, masterMbId);
 		} else if (command[0] == 'e') {
 			break;
 		}
@@ -745,6 +750,17 @@ void Manager::runManagerManually(Manager *manager, DetLoggerClient *detLoggerCli
 
 	alreadyReplayedPackets->clear();
 	delete alreadyReplayedPackets;
+}
+
+uint16_t Manager::getMasterMbId(string command) {
+	cout << "command size is: " << command.size() << ", command is: " << command << endl;
+	uint16_t masterMbId = 0;
+	if (command.size() == 3) {
+		masterMbId = atoi(&command[2]);
+	}
+
+	cout << "returned masterMbId: " << masterMbId << endl;
+	return masterMbId;
 }
 
 void setAddress(int argc, char *argv[], char* address) {
@@ -785,9 +801,10 @@ int main(int argc, char *argv[])
 		PacketLoggerClient *packetLoggerClient = new PacketLoggerClient(PACKET_LOGGER_SERVER_PORT, PACKET_LOGGER_SERVER_ADDRESS);
 		Manager::connectToServersForRecovery(detLoggerClient, slaveDetLoggerClient, packetLoggerClient);
 
-		if (argc == 3) {
+		if (argc == 4) {
 			int sleepInterval = atoi(argv[2]);
-			Manager::runManagerAutomatically(manager, sleepInterval, detLoggerClient, slaveDetLoggerClient, packetLoggerClient);
+			uint16_t masterMbId = atoi(argv[3]);
+			Manager::runManagerAutomatically(manager, masterMbId, sleepInterval, detLoggerClient, slaveDetLoggerClient, packetLoggerClient);
 		} else {
 			Manager::runManagerManually(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient);
 		}

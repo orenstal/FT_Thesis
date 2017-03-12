@@ -45,7 +45,7 @@ public:
 	void* getPals(uint64_t packId);
 
 private:
-	uint16_t _mbId;
+	uint16_t _masterMbId;
 	int _mbState;
 	Client *detLoggerClient;
 	uint16_t _vlanLevelOffset;	// it should be 1 if the packet has vlan tag for tsa, 0 otherwise

@@ -35,7 +35,6 @@
 #include "../common/pal_api/pals_manager.hh"
 
 #define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
-#define MASTER_MB_ID 1
 
 using namespace std;
 CLICK_DECLS
@@ -139,10 +138,12 @@ PreparePacket::~PreparePacket()
 int
 PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
 {
+	int masterMbId = 0;
 	bool isMasterMode = true;
 	int vlanLevelOffset = 1;
 
 	if (Args(conf, this, errh)
+	.read_p("MASTER_MB_ID", BoundedIntArg(1, 65535), masterMbId)
 	.read_p("MASTER", isMasterMode)
 	.read_p("VLAN_LEVEL_OFFSET", BoundedIntArg(0, 3), vlanLevelOffset)
 	.complete() < 0)
@@ -157,8 +158,10 @@ PreparePacket::configure(Vector<String> &conf, ErrorHandler *errh)
 	cout << "isMaster mode? " << isMasterMode << endl;
 
 	_vlanLevelOffset = vlanLevelOffset;
-
 	cout << "vlan level offset is: " << _vlanLevelOffset << endl;
+
+	_masterMbId = masterMbId;
+	cout << "masterMbId is: " << _masterMbId << endl;
 
 	if (isSlave()) {
 		cout << "[slave mode] connecting to det logger" << endl;
@@ -219,7 +222,7 @@ void* PreparePacket::getPals(uint64_t packId) {
 	char serialized[SERVER_BUFFER_SIZE];
 	int len;
 	PALSManager* pm = new PALSManager();
-	void* inputs = prepareGetPalsByMBIdAndPackId(MASTER_MB_ID, packId);
+	void* inputs = prepareGetPalsByMBIdAndPackId(_masterMbId, packId);
 	detLoggerClient->prepareToSend(inputs, serialized, &len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE);
 	bool isSucceed = detLoggerClient->sendMsgAndWait(serialized, len, GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE, static_cast<void*>(pm));
 
@@ -275,7 +278,7 @@ PreparePacket::smaction(Packet *p)	// main logic
 		}
 
 	} else if (isSlave()) {
-		DEBUG_STDOUT(cout << "[slave mode] start getting pals for mbId: " << MASTER_MB_ID << ", packId: " << unifiedId << endl);
+		DEBUG_STDOUT(cout << "[slave mode] start getting pals for master mbId: " << _masterMbId << ", packId: " << unifiedId << endl);
 		pm = (PALSManager*)getPals(unifiedId);
 
 		if (DEBUG) {
@@ -388,7 +391,7 @@ PreparePacket::write_handler(const String &in_str, Element *e, void *thunk, Erro
 void
 PreparePacket::add_handlers()
 {
-//	add_data_handlers("mb_id", Handler::h_read | Handler::h_write, &_mbId);
+//	add_data_handlers("master_mb_id", Handler::h_read | Handler::h_write, &_masterMbId);
 //	add_data_handlers("vlanLevelOffset", Handler::h_read | Handler::h_write, &_vlanLevelOffset);
 
 	add_read_handler("state", read_handler, H_MB_STATE_CALL);
