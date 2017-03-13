@@ -1,4 +1,4 @@
-// mb2.click 	--	mb2 (slave of mb1)
+// mb7.click 	--	mb7 (slave of mb6)
 
 classifier   :: Classifier(12/8100 /* 802.1Q packets */, -);
 ipClassifier :: Classifier(12/0800 /* IP packets */, -);

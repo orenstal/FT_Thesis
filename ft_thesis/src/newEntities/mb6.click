@@ -1,4 +1,4 @@
-// PushPacketId.click
+// mb6.click 	--	mb6 (master of mb7)
 
 classifier   :: Classifier(12/8100 /* 802.1Q packets */, -);
 ipClassifier :: Classifier(12/0800 /* IP packets */, -);
@@ -14,8 +14,6 @@ FromDevice("h6-eth0")
 	-> classifier
 	-> Strip(12) /* strip the 3 tsa vlan layers for packet id*/
 	-> ipClassifier
-//        -> CheckIPHeader(14, CHECKSUM false)
-//        -> tcpClassifier
 	-> Unstrip(12)
 	-> pp
 	-> Print()

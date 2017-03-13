@@ -116,6 +116,7 @@ Manager::Manager()
 
 void Manager::init() {
 	masterSlaveMapping.insert(make_pair(6,7));
+	masterSlaveMapping.insert(make_pair(7,10));
 	MbData* mb6Data = new MbData;
 	mb6Data->mbId = 6;
 	mb6Data->addressLen = 8;
@@ -132,11 +133,20 @@ void Manager::init() {
 	mb7Data->port = MB_PORT;
 	mbData.insert(make_pair(7, mb7Data));
 
+	MbData* mb10Data = new MbData;
+	mb10Data->mbId = 10;
+	mb10Data->addressLen = 9;
+	memset(mb10Data->ipAddress, '\0', MAX_ADDRESS_LEN);
+	memcpy(mb10Data->ipAddress, "10.0.0.10", mb10Data->addressLen);
+	mb10Data->port = MB_PORT;
+	mbData.insert(make_pair(10, mb10Data));
+
 }
 
 void Manager::freeMbData() {
-	delete mbData[1];
-	delete mbData[2];
+	delete mbData[6];
+	delete mbData[7];
+	delete mbData[10];
 }
 
 int Manager::replay(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets) {
