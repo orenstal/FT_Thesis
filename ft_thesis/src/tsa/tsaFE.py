@@ -221,7 +221,7 @@ class tsaFE(object):
 
                 print "stopped mb is: %s" %str(arguments)
                 oldMasterMbName = 'm'+arguments
-                newMb = 'm'+self.getSlaveMbOnStop(arguments)
+                newMb = self.getSlaveMbOnStop(arguments)
                 arguments += "," + str(newMb)
                 result = self.sendToCleanupManagerServer(tsaFE.STOP_MASTER_TSA_COMMAND_TYPE, arguments)
 

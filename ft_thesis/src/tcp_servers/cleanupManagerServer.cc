@@ -150,6 +150,7 @@ void* CleanupManagerServer::deserializeStopMasterTsaRequest(int command, char* m
 	DEBUG_STDOUT(cout << "[CleanupManagerServer::deserializeStopMasterTsaRequest] Start" << endl);
 //	cout << "[CleanupManagerServer::deserializeStopMasterTsaRequest] Start" << endl;
 
+
 	char* inputs = new char[2*sizeof(uint16_t)];
 	memset(inputs, '\0', 2*sizeof(uint16_t));
 
@@ -313,11 +314,17 @@ bool CleanupManagerServer::processTsaStopMasterRequest(void* obj, char* retVal, 
 	DEBUG_STDOUT(cout << "start replaying masterMbId: " << masterMbId << endl);
 	cout << "Invoke replay master mb id: " << oldMasterMbId << endl;
 
+	if (newMasterMbId <=0) {
+		cout << "ERROR: new master mb id (" << newMasterMbId << ") must be valid!" << endl;
+		return false;
+	}
+
 	bool hasPacketsFromOldMaster = replayAndClearPackets(oldMasterMbId);
 
 	cout << "*** wait until all master mb will be replayed and cleared before switching master mb" << endl;
 	while (hasPacketsFromOldMaster) {
 		hasPacketsFromOldMaster = replayAndClearPackets(oldMasterMbId);
+		usleep(500*1000);	// wait 0.5 sec
 	}
 	cout << "*** all master packets were played and cleared! Start switching master: " << oldMasterMbId << " to new master: " << newMasterMbId << endl;
 
