@@ -42,6 +42,12 @@ void Client::connectToServer() {
 	int val = 1;
 	setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val);
 
+	// LINUX
+	struct timeval tv;
+	tv.tv_sec = 1;	// 1 second timeout
+	tv.tv_usec = 0;
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv,sizeof(struct timeval));
+
 	//Connect to remote server
 	if (connect(sockfd , (struct sockaddr *)&sock_addr_server , sizeof(sock_addr_server)) < 0) {
 		printf("ERROR: Connect failed.\n");
@@ -162,6 +168,7 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
 	// client socket was closed and removed
 	if (totalReceivedBytes == -1) {
 		*msgLen = -1;
+		*status = -1;
 		return;
 	}
 
@@ -187,6 +194,7 @@ void Client::readCommonServerResponse(int sockfd, char* msg, int* msgLen, int* s
 
 	// client socket was closed and removed
 	if (totalReceivedBytes == -1) {
+		*status = -1;
 		return;
 	}
 
@@ -244,9 +252,12 @@ int Client::receiveMsgFromServer (int serverSockfd, int totalReceivedBytes, char
 			ret = recv(serverSockfd, ptr, maximalReceivedBytes - totalReceivedBytes, 0);
 			DEBUG_STDOUT(printf("ret: %d\n", ret));
 
-			if (ret <= 0) {
+			if (ret == 0) {
 				printf("Error: Server is terminated. exit...\n");
 				exit(1);
+			} else if (ret < 0) {
+				printf("Error: Failed to receive data from server.\n");
+				return -1;
 			}
 		}
 
@@ -267,7 +278,7 @@ bool Client::sendMsgAndWait(char* serialized, int length, int command, void* ret
 	DEBUG_STDOUT(printf("wait for receive\n"));
 	readCommonServerResponse(sockfd, retVal, &retValLen, &status);
 
-	if (status == 0) {
+	if (status <= 0) {
 		printf("ERROR: got failure status!\n");
 		return false;
 	}

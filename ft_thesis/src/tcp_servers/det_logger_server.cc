@@ -317,12 +317,17 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBase
 	DEBUG_STDOUT(cout << "spd->index before: " << spd->index << endl);
 
 	int totalPackets = spd->index;
+
 	mbDataMap *mbData = NULL;
 
 	lockMutex(&detData_mtx);
 	if (detData.find(mbId) != detData.end()) {
 		DEBUG_STDOUT(cout << "mbId " << mbId << " exist in detData" << endl);
 		mbData = &(detData[mbId]);
+	}
+
+	if (totalPackets < totalPacketBasesToRemove) {
+		totalPacketBasesToRemove = totalPackets;
 	}
 
 	for (int i=0; i<totalPacketBasesToRemove; i++) {
@@ -337,7 +342,7 @@ void DetLoggerServer::deleteFirstPackets(uint16_t mbId, uint32_t totalPacketBase
 	spd->packet_ids_vector.erase(spd->packet_ids_vector.begin(), spd->packet_ids_vector.begin() + totalPacketBasesToRemove);
 	spd->index -= totalPacketBasesToRemove;
 
-	cout << "Deleting " << totalPacketBasesToRemove << " packets" << endl;
+	cout << totalPacketBasesToRemove << " packets were deleted" << endl;
 	DEBUG_STDOUT(cout << "spd->index after: " << spd->index << endl);
 
 	unlockMutex(&(spd->lock));

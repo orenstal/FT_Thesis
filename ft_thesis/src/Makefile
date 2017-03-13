@@ -38,8 +38,13 @@ PACKETS_LOGGER_SERVER_EXECUTABLE = packetsLoggerServer
 #PACKETS_LOGGER_CLIENT_OBJECTS = $(PACKETS_LOGGER_CLIENT_SOURCES:.cpp=.o)
 #PACKETS_LOGGER_CLIENT_EXECUTABLE = packetsLoggerClient
 
-# Manager Client
-MANAGER_CLIENT_SOURCES = $(CLIENT_ROOT)/client.cc $(CLIENT_ROOT)/packets_logger_client.cc $(CLIENT_ROOT)/det_logger_client.cc $(CLIENT_ROOT)/manager.cc
+## Manager Client
+#MANAGER_CLIENT_SOURCES = $(CLIENT_ROOT)/client.cc $(CLIENT_ROOT)/packets_logger_client.cc $(CLIENT_ROOT)/det_logger_client.cc $(CLIENT_ROOT)/manager.cc
+#MANAGER_CLIENT_OBJECTS = $(MANAGER_CLIENT_SOURCES:.cpp=.o)
+#MANAGER_CLIENT_EXECUTABLE = manager
+
+# Manager Server
+MANAGER_CLIENT_SOURCES = $(SERVER_ROOT)/$(SERVER_FILE) $(CLIENT_ROOT)/client.cc $(CLIENT_ROOT)/packets_logger_client.cc $(CLIENT_ROOT)/det_logger_client.cc $(SERVER_ROOT)/cleanupManagerServer.cc
 MANAGER_CLIENT_OBJECTS = $(MANAGER_CLIENT_SOURCES:.cpp=.o)
 MANAGER_CLIENT_EXECUTABLE = manager
 

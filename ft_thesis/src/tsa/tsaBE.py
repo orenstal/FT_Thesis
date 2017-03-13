@@ -1065,7 +1065,7 @@ class tsaBE(object):
         matchFieldsAsKey = policyChainKey.split("$")[2]
 
         matchFields = []
-        for match in re.findall(r"([^=\s:]+)[\s]*:[\s]*([^\s\*]+)", matchFieldsAsKey):
+        for match in re.findall(r"[\*]*([^=\s:]+)[\s]*:[\s]*([^\s\*]+)", matchFieldsAsKey):
             matchFields.append((match[0], match[1]))
 
         return matchFields

@@ -13,16 +13,16 @@
 #define PACKETS_LOGGER_CLIENT_CC_
 
 
-
+#include "server.hh"
 #include <stdio.h>
 #include <string>
 #include <string.h>
 #include <iostream>
-#include "det_logger_client.hh"
-#include "packets_logger_client.hh"
+#include "../tcp_clients/det_logger_client.hh"
+#include "../tcp_clients/packets_logger_client.hh"
 #include "../common/replayPackets/replay_packets.hh"
 #include "../common/deletePackets/delete_packets.hh"
-#include "client.hh"
+#include "../tcp_clients/client.hh"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -36,11 +36,15 @@
 #include <inttypes.h>
 #include <limits>
 
-
 #define STORE_COMMAND_TYPE 0
 #define GET_PROCESSED_PACKET_IDS_BY_MBID_COMMAND_TYPE 1
 #define GET_PALS_BY_MBID_AND_PACKID_COMMAND_TYPE 2
 #define DELETE_PACKETS_COMMAND_TYPE 3
+
+#define REPLAY_PACKETS_TSA_COMMAND_TYPE 4
+#define CLEAR_PACKETS_TSA_COMMAND_TYPE 5
+#define REPLAY_AND_CLEAR_PACKETS_TSA_COMMAND_TYPE 6
+#define STOP_MASTER_TSA_COMMAND_TYPE 7
 
 #define DET_LOGGER_SERVER_PORT 9095
 #define DET_LOGGER_SERVER_ADDRESS "10.0.0.5" // "127.0.0.1"
@@ -49,6 +53,8 @@
 #define PACKET_LOGGER_SERVER_ADDRESS "10.0.0.4"	//"127.0.0.1"
 #define MANAGER_ADDRESS "10.0.0.9"	//"127.0.0.1"
 #define MB_PORT 9999
+
+#define CLEANUP_MANAGER_PORT 9001
 
 using namespace std;
 
@@ -63,10 +69,20 @@ typedef struct MbData {
 class DetLoggerClient;
 class PacketLoggerClient;
 
-class Manager {
+
+
+class CleanupManagerServer : public Server {
 private:
 	map<uint16_t, MbData* > mbData;
 	map<uint16_t, uint16_t > masterSlaveMapping;
+
+	string command;
+
+	pthread_spinlock_t commandLock;
+
+	DetLoggerClient *detLoggerClient;
+	DetLoggerClient *slaveDetLoggerClient;
+	PacketLoggerClient *packetLoggerClient;
 
 	MbData* getSlaveMbData(uint16_t masterMbId);
 
@@ -91,30 +107,262 @@ private:
 	void sendDeletePacketsPacketsRequest(PacketLoggerClient *client, DeletePackets* deletePacketsData);
 
 	int connectToPacketLoggerServer(char* mbAddress, int mbPort);
-
 	void deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, uint32_t totalFirstPacketsToBeDeleted);
 
-public:
-	Manager();
-	void init();
-	void freeMbData();
-	int replay(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets);
-	bool clearReplayedPackets(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsBasesToDelete, set<uint64_t> *alreadyReplayedPackets);
+	void* deserializeTsaMbId(char* msg);
+	void* deserializeStopMasterTsaRequest(int command, char* msg, int msgLen);
 
-	static int runReplayTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId);
-	static void runClearTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId);
-	static void runManagerAutomatically(Manager *manager, uint16_t masterMbId, int timeIntervalInMs, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
-	static void runManagerManually(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
+	bool replayAndClearPackets(uint16_t masterMbId);
+	bool processTsaReplayRequest(void* obj, char* retVal, int* retValLen);
+	bool processTsaClearRequest(void* obj, char* retVal, int* retValLen);
+	bool processTsaReplayAndClearRequest(void* obj, char* retVal, int* retValLen);
+	bool processTsaStopMasterRequest(void* obj, char* retVal, int* retValLen);
+
+	uint16_t getMbIdAs16BitsInt(char *mbId);
+
+protected:
+	void* deserializeClientRequest(int command, char* msg, int msgLen);
+	bool processRequest(void*, int command, char* retVal, int* retValLen);
+	void freeDeserializedObject(void* obj, int command);
+
+public:
+	CleanupManagerServer(int port) : Server(port) {
+		initSpinLock(&commandLock);
+	}
+
+	void initCleanupServer();
+	void freeMbData();
+	int replay(uint16_t masterMbId, set<uint64_t> *alreadyReplayedPackets);
+	int clearReplayedPackets(uint16_t masterMbId, int maxPacketsBasesToDelete, set<uint64_t> *alreadyReplayedPackets);
+
+	int runReplayTest(set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId);
+	void runClearTest(int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId);
+	void runManagerAutomatically(uint16_t masterMbId, int timeIntervalInMs);
+	void runManagerManually(uint16_t masterMbId);
+
 	static uint16_t getMasterMbId(string command);
 
-	static void connectToServersForRecovery(DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient);
+	void connectToServersForRecovery();
 };
 
-Manager::Manager()
-{
+
+void* CleanupManagerServer::deserializeStopMasterTsaRequest(int command, char* msg, int msgLen) {
+	DEBUG_STDOUT(cout << "[CleanupManagerServer::deserializeStopMasterTsaRequest] Start" << endl);
+//	cout << "[CleanupManagerServer::deserializeStopMasterTsaRequest] Start" << endl;
+
+	char* inputs = new char[2*sizeof(uint16_t)];
+	memset(inputs, '\0', 2*sizeof(uint16_t));
+
+	char mbId[msgLen];
+	memset(mbId, '\0', msgLen);
+
+	int i=0;
+	for (; i<msgLen; i++) {
+		if (msg[i] == ',') {
+			break;
+		} else {
+			mbId[i] = msg[i];
+		}
+	}
+	uint16_t oldMasterMbId = getMbIdAs16BitsInt(mbId);
+
+	memset(mbId, '\0', msgLen);
+	int j=0;
+	for (i++; i<msgLen; i++, j++) {
+		mbId[j] = msg[i];
+	}
+
+	uint16_t newMasterMbId = getMbIdAs16BitsInt(mbId);
+
+	uint16_t *q = (uint16_t*)inputs;
+	*q = oldMasterMbId;
+	q++;
+	*q = newMasterMbId;
+
+//	cout << "[CleanupManagerServer::deserializeStopMasterTsaRequest] End" << endl;
+	return (void*)inputs;
 }
 
-void Manager::init() {
+void* CleanupManagerServer::deserializeTsaMbId(char* msg) {
+	DEBUG_STDOUT(cout << "[CleanupManagerServer::deserializeTsaMbId] Start" << endl);
+	cout << "[CleanupManagerServer::deserializeTsaMbId] Start" << endl;
+	cout << "msg: " << msg << endl;
+
+	char* input = new char[sizeof(uint16_t)];
+	memset(input, '\0', sizeof(uint16_t));
+
+	uint16_t mbId = getMbIdAs16BitsInt(msg);
+
+	uint16_t *q = (uint16_t*)input;
+	*q = mbId;
+
+	cout << "mbId: " << mbId << endl;
+	cout << "[CleanupManagerServer::deserializeTsaMbId] End" << endl;
+	return (void*)input;
+}
+
+uint16_t CleanupManagerServer::getMbIdAs16BitsInt(char *mbId) {
+	cout << "mbId: " << mbId << endl;
+	int mb = atoi(mbId);
+	uint16_t mb16Bits = mb;
+
+	cout << "mb as int: " << mb << endl;
+	cout << "mb as 16 bits int: " << mb16Bits << endl;
+	cout << "sizeof(mb16Bits) == sizeof(uint16_t)? " << (sizeof(mb16Bits) == sizeof(uint16_t)) << endl;
+
+	return mb;
+}
+
+void* CleanupManagerServer::deserializeClientRequest(int command, char* msg, int msgLen) {
+	DEBUG_STDOUT(cout << "Manager::deserializeClientStoreRequest" << endl);
+	cout << "Manager::deserializeClientRequest" << endl;
+	cout << "command: " << command << endl;
+
+	if (command == REPLAY_PACKETS_TSA_COMMAND_TYPE) {
+		return deserializeTsaMbId(msg);
+	} else if (command == CLEAR_PACKETS_TSA_COMMAND_TYPE){
+		return deserializeTsaMbId(msg);
+	} else if (command == REPLAY_AND_CLEAR_PACKETS_TSA_COMMAND_TYPE){
+		return deserializeTsaMbId(msg);
+	} else if (command == STOP_MASTER_TSA_COMMAND_TYPE){
+		return deserializeStopMasterTsaRequest(command, msg, msgLen);
+	}
+
+	cout << "WARNING: invalid command !!" << endl;
+	return NULL;
+}
+
+bool CleanupManagerServer::replayAndClearPackets(uint16_t masterMbId) {
+	set<uint64_t> *alreadyReplayedPackets = new set<uint64_t>;
+
+	DEBUG_STDOUT(cout << "start replaying masterMbId: " << masterMbId << endl);
+	cout << "Invoke replay master mb id: " << masterMbId << endl;
+
+	int totalReplayedPackets = replay(masterMbId, alreadyReplayedPackets);
+	cout << "Invoke clear" << endl;
+	int totalDeletedPackets = clearReplayedPackets(masterMbId, totalReplayedPackets, alreadyReplayedPackets);
+
+	alreadyReplayedPackets->clear();
+	delete alreadyReplayedPackets;
+
+	bool hadPacketsToReplayOrDelete = (totalReplayedPackets > 0 || totalDeletedPackets > 0);
+	return hadPacketsToReplayOrDelete;
+}
+
+bool CleanupManagerServer::processTsaReplayAndClearRequest(void* obj, char* retVal, int* retValLen) {
+	DEBUG_STDOUT(cout << "[Manager::processTsaReplayAndClearRequest] Start" << endl);
+	uint16_t masterMbId = 0;
+
+	// extract master mb id from tsa client request
+	int *p = (int*)obj;
+	masterMbId = *p;
+
+	replayAndClearPackets(masterMbId);
+
+	DEBUG_STDOUT(cout << "[Manager::processTsaReplayAndClearRequest] End" << endl);
+	return true;
+}
+
+bool CleanupManagerServer::processTsaReplayRequest(void* obj, char* retVal, int* retValLen) {
+	DEBUG_STDOUT(cout << "[Manager::processTsaReplayRequest] Start" << endl);
+	uint16_t masterMbId = 0;
+
+	// extract master mb id from tsa client request
+	int *p = (int*)obj;
+	masterMbId = *p;
+
+
+	set<uint64_t> alreadyReplayedPackets;
+
+	DEBUG_STDOUT(cout << "start replaying masterMbId: " << masterMbId << endl);
+	cout << "Invoke replay master mb id: " << masterMbId << endl;
+
+	replay(masterMbId, &alreadyReplayedPackets);
+
+	DEBUG_STDOUT(cout << "[Manager::processTsaReplayRequest] End" << endl);
+	return true;
+}
+
+bool CleanupManagerServer::processTsaClearRequest(void* obj, char* retVal, int* retValLen) {
+	DEBUG_STDOUT(cout << "[Manager::processTsaClearRequest] Start" << endl);
+	uint16_t masterMbId = 0;
+
+	// extract master mb id from tsa client request
+	int *p = (int*)obj;
+	masterMbId = *p;
+
+	set<uint64_t> alreadyReplayedPackets;
+	cout << "Invoke clear" << endl;
+	clearReplayedPackets(masterMbId, numeric_limits<int>::max(), &alreadyReplayedPackets);
+
+	DEBUG_STDOUT(cout << "[Manager::processTsaClearRequest] End" << endl);
+	return true;
+}
+
+bool CleanupManagerServer::processTsaStopMasterRequest(void* obj, char* retVal, int* retValLen) {
+	DEBUG_STDOUT(cout << "[Manager::processTsaClearRequest] Start" << endl);
+	uint16_t oldMasterMbId = 0;
+	uint16_t newMasterMbId = 0;
+
+	// extract master mb id from tsa client request
+	uint16_t *p = (uint16_t*)obj;
+	oldMasterMbId = *p;
+	p++;
+	newMasterMbId = *p;
+
+	DEBUG_STDOUT(cout << "start replaying masterMbId: " << masterMbId << endl);
+	cout << "Invoke replay master mb id: " << oldMasterMbId << endl;
+
+	bool hasPacketsFromOldMaster = replayAndClearPackets(oldMasterMbId);
+
+	cout << "*** wait until all master mb will be replayed and cleared before switching master mb" << endl;
+	while (hasPacketsFromOldMaster) {
+		hasPacketsFromOldMaster = replayAndClearPackets(oldMasterMbId);
+	}
+	cout << "*** all master packets were played and cleared! Start switching master: " << oldMasterMbId << " to new master: " << newMasterMbId << endl;
+
+	replayAndClearPackets(newMasterMbId);
+
+	DEBUG_STDOUT(cout << "[Manager::processTsaClearRequest] End" << endl);
+	return true;
+}
+
+
+bool CleanupManagerServer::processRequest(void* obj, int command, char* retVal, int* retValLen) {
+	DEBUG_STDOUT(cout << "command is: " << command << endl);
+
+	if (command == REPLAY_PACKETS_TSA_COMMAND_TYPE) {
+		return processTsaReplayRequest(obj, retVal, retValLen);
+	} else if (command == CLEAR_PACKETS_TSA_COMMAND_TYPE) {
+		return processTsaClearRequest(obj, retVal, retValLen);
+	} else if (command == REPLAY_AND_CLEAR_PACKETS_TSA_COMMAND_TYPE) {
+		return processTsaReplayAndClearRequest(obj, retVal, retValLen);
+	} else if (command == STOP_MASTER_TSA_COMMAND_TYPE) {
+		return processTsaStopMasterRequest(obj, retVal, retValLen);
+	}
+
+	return false;
+}
+
+
+void CleanupManagerServer::freeDeserializedObject(void* obj, int command) {
+
+	if (command == REPLAY_PACKETS_TSA_COMMAND_TYPE) {
+		delete (char*)obj;
+	} else if (command == CLEAR_PACKETS_TSA_COMMAND_TYPE) {
+		delete (char*)obj;
+	} else if (command == REPLAY_AND_CLEAR_PACKETS_TSA_COMMAND_TYPE){
+		delete (char*)obj;
+	} else if (command == STOP_MASTER_TSA_COMMAND_TYPE) {
+		delete (char*)obj;
+	}
+}
+
+
+
+
+
+void CleanupManagerServer::initCleanupServer() {
 	masterSlaveMapping.insert(make_pair(6,7));
 	masterSlaveMapping.insert(make_pair(7,10));
 	MbData* mb6Data = new MbData;
@@ -141,15 +389,20 @@ void Manager::init() {
 	mb10Data->port = MB_PORT;
 	mbData.insert(make_pair(10, mb10Data));
 
+	detLoggerClient = new DetLoggerClient(DET_LOGGER_SERVER_PORT, DET_LOGGER_SERVER_ADDRESS);
+	slaveDetLoggerClient = new DetLoggerClient(DET_LOGGER_SERVER_PORT, DET_LOGGER_SLAVE_SERVER_ADDRESS);
+	packetLoggerClient = new PacketLoggerClient(PACKET_LOGGER_SERVER_PORT, PACKET_LOGGER_SERVER_ADDRESS);
+	connectToServersForRecovery();
+
 }
 
-void Manager::freeMbData() {
+void CleanupManagerServer::freeMbData() {
 	delete mbData[6];
 	delete mbData[7];
 	delete mbData[10];
 }
 
-int Manager::replay(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets) {
+int CleanupManagerServer::replay(uint16_t masterMbId, set<uint64_t> *alreadyReplayedPackets) {
 	printf("[Manager::replay] Start\n");
 
 	int totalReplayedPackets = 0;
@@ -162,11 +415,11 @@ int Manager::replay(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLo
 
 	printf("slaveData id is: %" PRIu16 ", address is: %s, port is: %d\n", slaveData->mbId, slaveData->ipAddress, slaveData->port);
 
-	vector<uint64_t>* masterProcessedPacketIds = Manager::getProcessedPacketIds(detLoggerClient, &masterMbId, false);
+	vector<uint64_t>* masterProcessedPacketIds = CleanupManagerServer::getProcessedPacketIds(detLoggerClient, &masterMbId, false);
 	uint32_t numOfFirstPacketsToBeReplayed = masterProcessedPacketIds->size();
 
 	uint16_t slaveMbId = slaveData->mbId;
-	vector<uint64_t>* slaveProcessedPacketIds = Manager::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId, false);
+	vector<uint64_t>* slaveProcessedPacketIds = CleanupManagerServer::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId, false);
 	vector<uint64_t>* unporcessedPacketIds = getUnprocessedPacketIds(masterProcessedPacketIds, slaveProcessedPacketIds, alreadyReplayedPackets);
 
 	if (unporcessedPacketIds->size() > 0) {
@@ -189,24 +442,25 @@ int Manager::replay(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLo
 }
 
 
-bool Manager::clearReplayedPackets(uint16_t masterMbId, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsBasesToDelete, set<uint64_t> *alreadyReplayedPackets) {
+int CleanupManagerServer::clearReplayedPackets(uint16_t masterMbId, int maxPacketsBasesToDelete, set<uint64_t> *alreadyReplayedPackets) {
 	printf("[Manager::clearReplayedPackets] Start\n");
 
+	int totalDeletedPackets = 0;
 	vector<uint64_t>* commonProcessedPacketIds;
 	MbData* slaveData = getSlaveMbData(masterMbId);
 
 	if (slaveData == NULL) {
 		printf("ERROR: failed to get slave mb data\n");
-		return false;
+		return -1;
 	}
 
 	printf("slaveData id is: %" PRIu16 ", address is: %s, port is: %d\n", slaveData->mbId, slaveData->ipAddress, slaveData->port);
 
 	vector<uint64_t>* orphanSlavePackets = new vector<uint64_t>;
-	vector<uint64_t>* masterProcessedPacketIds = Manager::getProcessedPacketIds(detLoggerClient, &masterMbId, true);
+	vector<uint64_t>* masterProcessedPacketIds = CleanupManagerServer::getProcessedPacketIds(detLoggerClient, &masterMbId, true);
 
 	uint16_t slaveMbId = slaveData->mbId;
-	vector<uint64_t>* slaveProcessedPacketIds = Manager::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId, true);
+	vector<uint64_t>* slaveProcessedPacketIds = CleanupManagerServer::getProcessedPacketIds(slaveDetLoggerClient, &slaveMbId, true);
 
 	if (masterProcessedPacketIds->size() == 0) {
 		// we want to delete orphan packets (although we don't expect to reach this code when slave.size>0)
@@ -251,6 +505,7 @@ bool Manager::clearReplayedPackets(uint16_t masterMbId, DetLoggerClient *detLogg
 		}
 
 		printf("%d packets were deleted successfully\n", commonProcessedPacketIds->size());
+		totalDeletedPackets = commonProcessedPacketIds->size();
 	}
 
 
@@ -261,12 +516,12 @@ bool Manager::clearReplayedPackets(uint16_t masterMbId, DetLoggerClient *detLogg
 	delete commonProcessedPacketIds;
 	delete orphanSlavePackets;
 
-	return true;
+	return totalDeletedPackets;
 }
 
 
 
-int Manager::connectToPacketLoggerServer(char* serverAddress, int serverPort) {
+int CleanupManagerServer::connectToPacketLoggerServer(char* serverAddress, int serverPort) {
 	DEBUG_STDOUT(printf("Manager::connectToPacketLoggerServer\n"));
 	DEBUG_STDOUT(printf("serverAddress is: %s, serverPort: %d\n", serverAddress, serverPort));
 
@@ -302,7 +557,7 @@ int Manager::connectToPacketLoggerServer(char* serverAddress, int serverPort) {
 }
 
 
-void Manager::sendReplayPacketsRequest(PacketLoggerClient *client, ReplayPackets* replayPacketsData) {
+void CleanupManagerServer::sendReplayPacketsRequest(PacketLoggerClient *client, ReplayPackets* replayPacketsData) {
 	DEBUG_STDOUT(printf("[Manager::sendReplayPacketsRequest] Start\n"));
 
 	char serialized[SERVER_BUFFER_SIZE];
@@ -321,7 +576,7 @@ void Manager::sendReplayPacketsRequest(PacketLoggerClient *client, ReplayPackets
 }
 
 
-ReplayPackets* Manager::createReplayPackets(MbData* slaveData, vector<uint64_t>* unporcessedPacketIds) {
+ReplayPackets* CleanupManagerServer::createReplayPackets(MbData* slaveData, vector<uint64_t>* unporcessedPacketIds) {
 	DEBUG_STDOUT(printf("[Manager::createReplayPackets] Start\n"));
 
 	ReplayPackets* replayPackets = new ReplayPackets;
@@ -369,7 +624,7 @@ ReplayPackets* Manager::createReplayPackets(MbData* slaveData, vector<uint64_t>*
 	return replayPackets;
 }
 
-DeletePackets* Manager::createDeletePacketsData(vector<uint64_t>* packetIdsToDelete) {
+DeletePackets* CleanupManagerServer::createDeletePacketsData(vector<uint64_t>* packetIdsToDelete) {
 	DEBUG_STDOUT(printf("[Manager::createDeletePacketsData] Start\n"));
 
 	DeletePackets* deletePacketsData = new DeletePackets;
@@ -397,7 +652,7 @@ DeletePackets* Manager::createDeletePacketsData(vector<uint64_t>* packetIdsToDel
 }
 
 
-void Manager::sendDeletePacketsPacketsRequest(PacketLoggerClient *client, DeletePackets* deletePacketsData) {
+void CleanupManagerServer::sendDeletePacketsPacketsRequest(PacketLoggerClient *client, DeletePackets* deletePacketsData) {
 	DEBUG_STDOUT(printf("[Manager::sendDeletePacketsPacketsRequest] Start\n"));
 
 	char serialized[SERVER_BUFFER_SIZE];
@@ -417,7 +672,7 @@ void Manager::sendDeletePacketsPacketsRequest(PacketLoggerClient *client, Delete
 
 
 // Erase from the master vector all the packets ids that are processed by the slave
-vector<uint64_t>* Manager::getUnprocessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
+vector<uint64_t>* CleanupManagerServer::getUnprocessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
 		vector<uint64_t>* slaveProcessedPacketIds, set<uint64_t> *alreadyReplayedPackets) {
 	DEBUG_STDOUT(printf("[Manager::getUnprocessedPacketIds] Start\n"));
 
@@ -493,7 +748,7 @@ vector<uint64_t>* Manager::getUnprocessedPacketIds(vector<uint64_t>* masterProce
 }
 
 
-vector<uint64_t>* Manager::getCommonProcessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
+vector<uint64_t>* CleanupManagerServer::getCommonProcessedPacketIds(vector<uint64_t>* masterProcessedPacketIds,
 		vector<uint64_t>* slaveProcessedPacketIds, int maxPacketsBasesToDelete, set<uint64_t> *alreadyReplayedPackets,
 		vector<uint64_t>* orphanSlavePackets) {
 	DEBUG_STDOUT(printf("[Manager::getCommonProcessedPacketIds] Start\n"));
@@ -547,7 +802,7 @@ vector<uint64_t>* Manager::getCommonProcessedPacketIds(vector<uint64_t>* masterP
 	return commonProcessed;
 }
 
-bool Manager::addPacket(set<int> *packetBasesToDelete, vector<uint64_t>* commonProcessed, set<uint64_t> *alreadyReplayedPackets, int maxPacketsBasesToDelete, uint64_t packetToAdd) {
+bool CleanupManagerServer::addPacket(set<int> *packetBasesToDelete, vector<uint64_t>* commonProcessed, set<uint64_t> *alreadyReplayedPackets, int maxPacketsBasesToDelete, uint64_t packetToAdd) {
 
 	uint64_t packetBase = (packetToAdd) >> 5;
 
@@ -569,7 +824,7 @@ bool Manager::addPacket(set<int> *packetBasesToDelete, vector<uint64_t>* commonP
 	return false;
 }
 
-void Manager::setSlaveOrphanPacketIds(uint64_t packetId,
+void CleanupManagerServer::setSlaveOrphanPacketIds(uint64_t packetId,
 		vector<uint64_t>::iterator slaveIter, vector<uint64_t>* slaveProcessedPacketIds,
 		vector<uint64_t>* orphanSlavePackets) {
 	DEBUG_STDOUT(printf("[Manager::setSlaveOrphanPacketIds] Start\n"));
@@ -602,7 +857,7 @@ void Manager::setSlaveOrphanPacketIds(uint64_t packetId,
 
 
 
-MbData* Manager::getSlaveMbData(uint16_t masterMbId) {
+MbData* CleanupManagerServer::getSlaveMbData(uint16_t masterMbId) {
 	DEBUG_STDOUT(printf("[Manager::getSlaveMbData] Start\n"));
 
 	MbData* slaveData = NULL;
@@ -624,7 +879,7 @@ MbData* Manager::getSlaveMbData(uint16_t masterMbId) {
 	return slaveData;
 }
 
-void Manager::connectToServersForRecovery(DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient) {
+void CleanupManagerServer::connectToServersForRecovery() {
 	printf("starting connecting to servers...\n");
 
 	detLoggerClient->connectToServer();
@@ -635,7 +890,7 @@ void Manager::connectToServersForRecovery(DetLoggerClient *detLoggerClient, DetL
 	printf("done connecting to servers...\n");
 }
 
-void* Manager::prepareGetProcessedPackets(uint16_t mbId, bool allVersions) {
+void* CleanupManagerServer::prepareGetProcessedPackets(uint16_t mbId, bool allVersions) {
 	DEBUG_STDOUT(printf("[Manager::prepareGetProcessedPackets] Start\n"));
 
 	char* input = new char[sizeof(uint16_t)+sizeof(bool)+1];
@@ -649,7 +904,7 @@ void* Manager::prepareGetProcessedPackets(uint16_t mbId, bool allVersions) {
 	return (void*)input;
 }
 
-vector<uint64_t>* Manager::getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId, bool allVersions) {
+vector<uint64_t>* CleanupManagerServer::getProcessedPacketIds(DetLoggerClient *client, uint16_t* mbId, bool allVersions) {
 	DEBUG_STDOUT(printf("[Manager::getProcessedPacketIds] Start\n"));
 	DEBUG_STDOUT(printf("mbId: %" PRIu16 "\n", *mbId));
 
@@ -681,7 +936,7 @@ vector<uint64_t>* Manager::getProcessedPacketIds(DetLoggerClient *client, uint16
 
 }
 
-void Manager::deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, uint32_t totalFirstPacketsToBeDeleted) {
+void CleanupManagerServer::deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, uint32_t totalFirstPacketsToBeDeleted) {
 	DEBUG_STDOUT(printf("[Manager::deleteFirstPacketsRequest] Start\n"));
 	DEBUG_STDOUT(printf("mbId: %" PRIu16 "\n", mbId));
 	DEBUG_STDOUT(printf("totalFirstPacketsToBeDeleted: %" PRIu32 "\n", totalFirstPacketsToBeDeleted));
@@ -709,34 +964,35 @@ void Manager::deleteFirstPacketsRequest(DetLoggerClient *client, uint16_t mbId, 
 	DEBUG_STDOUT(printf("[Manager::deleteFirstPacketsRequest] End\n"));
 }
 
-int Manager::runReplayTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId) {
+int CleanupManagerServer::runReplayTest(set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId) {
 	printf("start replaying mb %d\n", masterMbId);
-	return manager->replay(masterMbId, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets);
+	return replay(masterMbId, alreadyReplayedPackets);
 }
 
+/*
 void Manager::runClearTest(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient, int maxPacketsToDelete, set<uint64_t> *alreadyReplayedPackets, uint16_t masterMbId) {
 	printf("start clearing mb %d\n", masterMbId);
-	manager->clearReplayedPackets(masterMbId, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, maxPacketsToDelete, alreadyReplayedPackets);
+	manager->clearReplayedPackets(masterMbId, maxPacketsToDelete, alreadyReplayedPackets);
 }
 
-void Manager::runManagerAutomatically(Manager *manager, uint16_t masterMbId, int timeIntervalInMs, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient) {
+void Manager::runManagerAutomatically(uint16_t masterMbId, int timeIntervalInMs) {
 	cout << "sleepInterval is: " << timeIntervalInMs << " ms" << endl;
 	cout << "masterMbId is: " << masterMbId << endl;
 	set<uint64_t> *alreadyReplayedPackets = new set<uint64_t>;
 
-	while(true) {
+	while(command.compare("hi")) {
 		usleep(timeIntervalInMs*1000);
 		cout << "Invoke replay" << endl;
-		int maxPacketsToDelete = Manager::runReplayTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, alreadyReplayedPackets, masterMbId);
+		int maxPacketsToDelete = runReplayTest(alreadyReplayedPackets, masterMbId);
 		cout << "Invoke clear" << endl;
-		Manager::runClearTest(manager, detLoggerClient, slaveDetLoggerClient, packetLoggerClient, maxPacketsToDelete, alreadyReplayedPackets, masterMbId);
+		runClearTest(maxPacketsToDelete, alreadyReplayedPackets, masterMbId);
 	}
 
 	alreadyReplayedPackets->clear();
 	delete alreadyReplayedPackets;
 }
 
-void Manager::runManagerManually(Manager *manager, DetLoggerClient *detLoggerClient, DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient) {
+void Manager::runManagerManually(DetLoggerClient *slaveDetLoggerClient, PacketLoggerClient *packetLoggerClient) {
 
 	set<uint64_t> *alreadyReplayedPackets = new set<uint64_t>;
 
@@ -760,9 +1016,9 @@ void Manager::runManagerManually(Manager *manager, DetLoggerClient *detLoggerCli
 
 	alreadyReplayedPackets->clear();
 	delete alreadyReplayedPackets;
-}
+}*/
 
-uint16_t Manager::getMasterMbId(string command) {
+uint16_t CleanupManagerServer::getMasterMbId(string command) {
 	cout << "command size is: " << command.size() << ", command is: " << command << endl;
 	uint16_t masterMbId = 0;
 	if (command.size() == 3) {
@@ -795,6 +1051,21 @@ void setAddress(int argc, char *argv[], char* address) {
 }
 #endif
 #endif
+
+int main(int argc, char *argv[])
+{
+	cout << "start" << endl;
+
+	CleanupManagerServer *server = new CleanupManagerServer(CLEANUP_MANAGER_PORT);
+	server->init();
+	server->initCleanupServer();
+	server->run();
+
+	delete server;
+	return 0;
+}
+
+/*
 int main(int argc, char *argv[])
 {
 	char address[MAX_ADDRESS_LEN];
@@ -834,3 +1105,4 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+*/
