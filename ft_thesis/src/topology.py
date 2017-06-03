@@ -18,10 +18,10 @@ Two directly connected switches plus a host for each switch:
    h2 - wrapped packet client(creates packet id and send to packet logger server [h4])
    h3 - the host that receives the packets that are sent from h1 (the destination host)
    h4 - packet logger server
-   h5 - determinant logger server
-   h6 - mb 1 (extracts packet id and sends records to determinant logger server [h5])
+   h5 - master determinant logger server
+   h6 - mb 1 *master* (extracts packet id and sends records to determinant logger server [h5])
    h7 - mb 1 *slave* (extracts packet id and sends records to determinant logger *slave* server [h8])
-   h8 - determinant logger *slave* server
+   h8 - *slave * determinant logger server
    h9 - framework manager (listen to user input and trigger recovery logic)
    h10 - slave mb of mb1 *slave* (the slave of h7 in case of h6 failure)
 
